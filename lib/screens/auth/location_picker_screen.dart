@@ -37,12 +37,12 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                       width: 38,
                       height: 38,
                       decoration: BoxDecoration(
-                        color: AppColors.gris1,
                         borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: AppColors.gris1),
                       ),
                       child: Icon(
                         Icons.arrow_back_ios_new_rounded,
-                        color: AppColors.vert,
+                        color: Colors.black,
                         size: 18,
                       ),
                     ),

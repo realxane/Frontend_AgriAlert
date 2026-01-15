@@ -1,3 +1,4 @@
+import 'package:agri_alert/routes/app_routes.dart';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
@@ -164,7 +165,6 @@ class _CreateChampScreenState extends State<CreateChampScreen> {
     if (picked != null) {
       setState(() {
         _selectedLatLng = picked;
-        // demandé: remplir par longitude et latitude
         _locationController.text =
             'Longitude: ${picked.longitude.toStringAsFixed(6)}, Latitude: ${picked.latitude.toStringAsFixed(6)}';
       });
@@ -464,9 +464,7 @@ class _CreateChampScreenState extends State<CreateChampScreen> {
               OrangeButton(
                 label: 'Continuer',
                 onPressed: () {
-                  // TODO: action "Continuer"
-                  // Exemple: tu peux valider ici puis naviguer vers la suite
-                  // (je te laisse brancher à ton flow)
+                  Navigator.pushNamed(context, AppRoutes.accueil);
                 },
               ),
             ],

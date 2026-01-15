@@ -7,6 +7,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/auth/signup_screen.dart';
 import 'screens/auth/champ_create_screen.dart';
+import 'screens/home/home_screen.dart';
 
 
 void main() {
@@ -33,6 +34,7 @@ class MainApp extends StatelessWidget {
         AppRoutes.forgotPassword: (context) => ForgotPasswordScreen(),
         AppRoutes.newPassword: (context) => NewPasswordScreen(),
         AppRoutes.createChamp: (context) => CreateChampScreen(),
+        AppRoutes.accueil: (context) => HomeScreen(),
       },
     );
   }

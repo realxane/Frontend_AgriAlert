@@ -9,6 +9,8 @@ class AppImages {
 
   static const String alassane = "assets/images/alassane.jpg";
   static const String feuille = "assets/images/feuille.png";
+  static const String nuagemeteo = "assets/images/nuage.png";
+  static const String scan = "assets/images/scan.png";
 
   //icônes
   static const String home = "assets/images/Icônes/home.svg";

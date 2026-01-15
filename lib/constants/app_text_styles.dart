@@ -15,6 +15,13 @@ class AppTextStyles {
     color: AppColors.gris1,
   );
 
+  //Texte gris 2
+  static const TextStyle textgris2 = TextStyle( 
+    fontSize: 13,
+    fontWeight: FontWeight.w500,
+    color: AppColors.gris3,
+  );
+
   // Texte noir
   static const TextStyle textnoir = TextStyle(
     fontSize: 13,
