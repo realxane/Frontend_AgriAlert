@@ -179,7 +179,7 @@ class _Header extends StatelessWidget {
                   style: AppTextStyles.titre1.copyWith(
                     color: Colors.black,
                     fontSize: 18,
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w700, 
                   ),
                 ),
               ],
