@@ -546,7 +546,7 @@ class _BottomBar extends StatelessWidget {
               onTap: () => onTap(1),
             ),
           ),
-          const SizedBox(width: 72),
+          const SizedBox(width: 30),
           Expanded(
             child: _NavItem(
               label: 'Météo',
