@@ -5,18 +5,18 @@ class AppTextStyles {
   // Titres
   static const TextStyle titre1 = TextStyle(
     fontSize: 24,
-    fontWeight: FontWeight.bold
+    fontWeight: FontWeight.bold,
   );
 
   // Texte gris
-  static const TextStyle textgris = TextStyle( 
+  static const TextStyle textgris = TextStyle(
     fontSize: 13,
     fontWeight: FontWeight.w500,
     color: AppColors.gris1,
   );
 
   //Texte gris 2
-  static const TextStyle textgris2 = TextStyle( 
+  static const TextStyle textgris2 = TextStyle(
     fontSize: 13,
     fontWeight: FontWeight.w500,
     color: AppColors.gris3,

@@ -13,6 +13,18 @@ class AppRoutes {
   static const String accueil = '/accueil';
   //page profil
   static const String profil = '/profil_user';
+  static const String modifieProfil = '/modifie_profil_user';
+
   //page création de champ
   static const String createChamp = '/creation_champ';
+  //page scanner
+  static const String scan = '/scan';
+  //page recommandation
+  static const String recommandation = '/recommandation';
+  //page détail recommandation
+  static const String detailRecommandation = '/detail_recommandation';
+  //page modification de champ
+  static const String modifieChamp = '/modifie_champ_page';
+  //page météo
+  static const String meteo = '/meteo';
 }

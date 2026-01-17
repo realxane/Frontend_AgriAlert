@@ -16,6 +16,8 @@ dependencies:
   iconify_flutter: ^0.0.7
   iconsax: ^0.0.8
   flutter_launcher_icons: ^0.14.4
+  camera: ^0.11.3
+  image_picker: ^1.2.1
 
 dev_dependencies:
   flutter_test:

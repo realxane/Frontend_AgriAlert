@@ -1,3 +1,5 @@
+import 'package:agri_alert/screens/meteo/meteo_page.dart';
+import 'package:agri_alert/screens/profil/profil_page.dart';
 import 'package:flutter/material.dart';
 import 'package:iconify_flutter/iconify_flutter.dart';
 import 'package:iconify_flutter/icons/ph.dart';
@@ -5,6 +7,8 @@ import 'package:iconsax/iconsax.dart';
 import '../../constants/app_colors.dart';
 import '../../constants/app_text_styles.dart';
 import '../../constants/app_images.dart';
+
+import '../Recommandation/recommandation_page.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -16,142 +20,25 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int _currentIndex = 0;
 
-  // ✅ Limites d’affichage par défaut (preview)
-  static const int _maxAlertsPreview = 2;
-  static const int _maxDiagnosticsPreview = 6;
-
-  // ✅ Toggle “Voir tout / Voir moins”
-  bool _showAllAlerts = false; 
-  bool _showAllDiagnostics = false;
-
-  final List<_AlertItem> _alerts = const [
-    _AlertItem(title: 'Forte sécheresse', date: 'Jeudi°17/12/2025'),
-    _AlertItem(title: 'Forte sécheresse', date: 'Jeudi°17/12/2025'),
-    _AlertItem(title: 'Inondation', date: 'Vendredi°18/12/2025'),
-    _AlertItem(title: 'Vent fort', date: 'Samedi°19/12/2025'),
-  ];
-
-  final List<_DiagItem> _diagnostics = const [
-    _DiagItem(label: 'Maïs', date: 'Jeudi°17/12/2025'),
-    _DiagItem(label: 'Maïs', date: 'Jeudi°17/12/2025'),
-    _DiagItem(label: 'Maïs', date: 'Jeudi°17/12/2025'),
-    _DiagItem(label: 'Maïs', date: 'Jeudi°17/12/2025'),
-    _DiagItem(label: 'Maïs', date: 'Jeudi°17/12/2025'),
-    _DiagItem(label: 'Maïs', date: 'Jeudi°17/12/2025'),
-    _DiagItem(label: 'Riz', date: 'Dimanche°20/12/2025'),
-    _DiagItem(label: 'Tomate', date: 'Lundi°21/12/2025'),
+  final List<Widget> _pages = [
+    const _HomeContent(),
+    const RecommandationsScreen(),
+    const WeatherPage(),
+    const ProfileScreen(),
   ];
 
   @override
   Widget build(BuildContext context) {
-    final media = MediaQuery.of(context);
-
     const fabSize = 66.0;
     const bottomBarBaseHeight = 64.0;
-    final bottomInset = media.padding.bottom;
-    final bottomBarTotalHeight = bottomBarBaseHeight + bottomInset;
-    final scrollBottomPadding = bottomBarTotalHeight + (fabSize / 2) + 18;
-
-    // ✅ Calculs “preview vs full”
-    final hasMoreAlerts = _alerts.length > _maxAlertsPreview;
-    final hasMoreDiagnostics = _diagnostics.length > _maxDiagnosticsPreview;
-
-    final alertsToShow = (_showAllAlerts || !hasMoreAlerts)
-        ? _alerts
-        : _alerts.take(_maxAlertsPreview).toList();
-
-    final diagnosticsToShow = (_showAllDiagnostics || !hasMoreDiagnostics)
-        ? _diagnostics
-        : _diagnostics.take(_maxDiagnosticsPreview).toList();
 
     return Scaffold(
       backgroundColor: AppColors.gris2,
       extendBody: true,
       resizeToAvoidBottomInset: false,
-      body: SafeArea(
-        bottom: true,
-        child: Column(
-          children: [
-            _Header(
-              userName: 'Alassane',
-              subtitle: 'Commence tes activités agricoles',
-              temperature: '29°',
-              condition: 'Cloudy',
-              topPadding: 18,
-              sidePadding: 16,
-              height: media.size.height * 0.2,
-              onNotificationTap: () {},
-              showNotificationDot: true,
-            ),
-            Expanded(
-              child: SingleChildScrollView(
-                padding: EdgeInsets.fromLTRB(16, 14, 16, scrollBottomPadding),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // ---------------- Alertes ----------------
-                    _SectionHeader(
-                      title: 'Alertes',
-                      action: hasMoreAlerts
-                          ? (_showAllAlerts ? 'Voir moins' : 'Voir tout')
-                          : null,
-                      onTap: hasMoreAlerts
-                          ? () => setState(() => _showAllAlerts = !_showAllAlerts)
-                          : null,
-                    ),
-                    const SizedBox(height: 10),
-                    _CardContainer(
-                      child: Column(
-                        children: [
-                          for (int i = 0; i < alertsToShow.length; i++) ...[
-                            _ListRow(
-                              leadingImage: AppImages.alassane,
-                              title: alertsToShow[i].title,
-                              subtitle: alertsToShow[i].date,
-                            ),
-                            if (i != alertsToShow.length - 1)
-                              const SizedBox(height: 10),
-                          ],
-                        ],
-                      ),
-                    ),
 
-                    const SizedBox(height: 18),
+      body: _pages[_currentIndex],
 
-                    // -------- Historique de diagnostics --------
-                    _SectionHeader(
-                      title: 'Historique de diagnostics',
-                      action: hasMoreDiagnostics
-                          ? (_showAllDiagnostics ? 'Voir moins' : 'Voir tout')
-                          : null,
-                      onTap: hasMoreDiagnostics
-                          ? () => setState(() =>
-                              _showAllDiagnostics = !_showAllDiagnostics)
-                          : null,
-                    ),
-                    const SizedBox(height: 10),
-                    _CardContainer(
-                      child: Column(
-                        children: [
-                          for (int i = 0; i < diagnosticsToShow.length; i++) ...[
-                            _ListRow(
-                              leadingImage: AppImages.alassane,
-                              title: diagnosticsToShow[i].label,
-                              subtitle: diagnosticsToShow[i].date,
-                            ),
-                            if (i != diagnosticsToShow.length - 1)
-                              const SizedBox(height: 12),
-                          ],
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
       floatingActionButton: SizedBox(
         width: fabSize,
@@ -159,7 +46,9 @@ class _HomeScreenState extends State<HomeScreen> {
         child: FloatingActionButton(
           elevation: 5,
           backgroundColor: Colors.transparent,
-          onPressed: () {},
+          onPressed: () {
+            Navigator.pushNamed(context, '/scan');
+          },
           child: Image.asset(
             AppImages.scan,
             width: fabSize,
@@ -177,16 +66,151 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
+/* -------------------------------------------------------------------------- */
+/* CONTENU DE L'ACCUEIL                             */
+/* -------------------------------------------------------------------------- */
+
+class _HomeContent extends StatefulWidget {
+  const _HomeContent();
+
+  @override
+  State<_HomeContent> createState() => _HomeContentState();
+}
+
+class _HomeContentState extends State<_HomeContent> {
+  static const int _maxAlertsPreview = 2;
+  static const int _maxDiagnosticsPreview = 6;
+
+  bool _showAllAlerts = false;
+  bool _showAllDiagnostics = false;
+
+  final List<_AlertItem> _alerts = const [
+    _AlertItem(title: 'Forte sécheresse', date: 'Jeudi 17/12/2025'),
+    _AlertItem(title: 'Forte sécheresse', date: 'Jeudi 17/12/2025'),
+    _AlertItem(title: 'Inondation', date: 'Vendredi 18/12/2025'),
+    _AlertItem(title: 'Vent fort', date: 'Samedi 19/12/2025'),
+  ];
+
+  final List<_DiagItem> _diagnostics = const [
+    _DiagItem(label: 'Maïs', date: 'Jeudi 17/12/2025'),
+    _DiagItem(label: 'Maïs', date: 'Jeudi 17/12/2025'),
+    _DiagItem(label: 'Maïs', date: 'Jeudi 17/12/2025'),
+    _DiagItem(label: 'Maïs', date: 'Jeudi 17/12/2025'),
+    _DiagItem(label: 'Maïs', date: 'Jeudi 17/12/2025'),
+    _DiagItem(label: 'Maïs', date: 'Jeudi 17/12/2025'),
+    _DiagItem(label: 'Riz', date: 'Dimanche 20/12/2025'),
+    _DiagItem(label: 'Tomate', date: 'Lundi 21/12/2025'),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final media = MediaQuery.of(context);
+    const fabSize = 66.0;
+    const bottomBarBaseHeight = 64.0;
+    final bottomInset = media.padding.bottom;
+    final bottomBarTotalHeight = bottomBarBaseHeight + bottomInset;
+    final scrollBottomPadding = bottomBarTotalHeight + (fabSize / 2) + 18;
+
+    final hasMoreAlerts = _alerts.length > _maxAlertsPreview;
+    final hasMoreDiagnostics = _diagnostics.length > _maxDiagnosticsPreview;
+
+    final alertsToShow = (_showAllAlerts || !hasMoreAlerts)
+        ? _alerts
+        : _alerts.take(_maxAlertsPreview).toList();
+
+    final diagnosticsToShow = (_showAllDiagnostics || !hasMoreDiagnostics)
+        ? _diagnostics
+        : _diagnostics.take(_maxDiagnosticsPreview).toList();
+
+    return SafeArea(
+      bottom: false,
+      child: Column(
+        children: [
+          _Header(
+            userName: 'Alassane',
+            subtitle: 'Commence tes activités agricoles',
+            temperature: '29°',
+            condition: 'Cloudy',
+            topPadding: 18,
+            sidePadding: 16,
+            height: media.size.height * 0.2,
+            onNotificationTap: () {},
+            showNotificationDot: true,
+          ),
+          Expanded(
+            child: SingleChildScrollView(
+              padding: EdgeInsets.fromLTRB(16, 14, 16, scrollBottomPadding),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _SectionHeader(
+                    title: 'Alertes',
+                    action: hasMoreAlerts
+                        ? (_showAllAlerts ? 'Voir moins' : 'Voir tout')
+                        : null,
+                    onTap: hasMoreAlerts
+                        ? () => setState(() => _showAllAlerts = !_showAllAlerts)
+                        : null,
+                  ),
+                  const SizedBox(height: 10),
+                  _CardContainer(
+                    child: Column(
+                      children: [
+                        for (int i = 0; i < alertsToShow.length; i++) ...[
+                          _ListRow(
+                            leadingImage: AppImages.alassane,
+                            title: alertsToShow[i].title,
+                            subtitle: alertsToShow[i].date,
+                          ),
+                          if (i != alertsToShow.length - 1)
+                            const SizedBox(height: 10),
+                        ],
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  _SectionHeader(
+                    title: 'Historique de diagnostics',
+                    action: hasMoreDiagnostics
+                        ? (_showAllDiagnostics ? 'Voir moins' : 'Voir tout')
+                        : null,
+                    onTap: hasMoreDiagnostics
+                        ? () => setState(
+                            () => _showAllDiagnostics = !_showAllDiagnostics,
+                          )
+                        : null,
+                  ),
+                  const SizedBox(height: 10),
+                  _CardContainer(
+                    child: Column(
+                      children: [
+                        for (int i = 0; i < diagnosticsToShow.length; i++) ...[
+                          _ListRow(
+                            leadingImage: AppImages.alassane,
+                            title: diagnosticsToShow[i].label,
+                            subtitle: diagnosticsToShow[i].date,
+                          ),
+                          if (i != diagnosticsToShow.length - 1)
+                            const SizedBox(height: 12),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 /* ----------------------------- HEADER ----------------------------- */
 
 class _Header extends StatelessWidget {
-  final String userName;
-  final String subtitle;
-  final String temperature;
-  final String condition;
-  final double height;
-  final double topPadding;
-  final double sidePadding;
+  final String userName, subtitle, temperature, condition;
+  final double height, topPadding, sidePadding;
   final VoidCallback onNotificationTap;
   final bool showNotificationDot;
 
@@ -235,13 +259,16 @@ class _Header extends StatelessWidget {
             ),
           ),
           Padding(
-            padding:
-                EdgeInsets.fromLTRB(sidePadding, topPadding, sidePadding, 12),
+            padding: EdgeInsets.fromLTRB(
+              sidePadding,
+              topPadding,
+              sidePadding,
+              12,
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
                     _Avatar(image: AppImages.alassane, size: 44),
                     const SizedBox(width: 10),
@@ -251,25 +278,21 @@ class _Header extends StatelessWidget {
                         children: [
                           Text(
                             'Bonjour $userName !',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
                             style: AppTextStyles.titre1.copyWith(
                               color: Colors.black87,
                             ),
+                            overflow: TextOverflow.ellipsis,
                           ),
-                          const SizedBox(height: 2),
                           Text(
                             subtitle,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
                             style: AppTextStyles.textgris.copyWith(
                               color: Colors.black54,
                             ),
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ],
                       ),
                     ),
-                    const SizedBox(width: 10),
                     _NotificationIconifyButton(
                       onTap: onNotificationTap,
                       showDot: showNotificationDot,
@@ -279,11 +302,7 @@ class _Header extends StatelessWidget {
                 const Spacer(),
                 Row(
                   children: [
-                    Image.asset(
-                      AppImages.nuagemeteo,
-                      height: 46,
-                      fit: BoxFit.contain,
-                    ),
+                    Image.asset(AppImages.nuagemeteo, height: 46),
                     const SizedBox(width: 10),
                     Expanded(
                       child: Center(
@@ -296,19 +315,17 @@ class _Header extends StatelessWidget {
                         ),
                       ),
                     ),
-                    const SizedBox(width: 10),
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
                         Text(
                           temperature,
                           style: AppTextStyles.textnoir.copyWith(
-                            color: Colors.white.withOpacity(0.95),
+                            color: Colors.white,
                             fontSize: 14,
-                            fontWeight: FontWeight.w700,
+                            fontWeight: FontWeight.bold,
                           ),
                         ),
-                        const SizedBox(height: 2),
                         Text(
                           condition,
                           style: AppTextStyles.textgris.copyWith(
@@ -332,7 +349,6 @@ class _Header extends StatelessWidget {
 class _NotificationIconifyButton extends StatelessWidget {
   final VoidCallback onTap;
   final bool showDot;
-
   const _NotificationIconifyButton({
     required this.onTap,
     required this.showDot,
@@ -349,10 +365,7 @@ class _NotificationIconifyButton extends StatelessWidget {
         decoration: BoxDecoration(
           color: AppColors.vert.withOpacity(0.90),
           shape: BoxShape.circle,
-          border: Border.all(
-            color: Colors.white.withOpacity(0.55),
-            width: 1.2,
-          ),
+          border: Border.all(color: Colors.white.withOpacity(0.55), width: 1.2),
         ),
         child: Stack(
           children: [
@@ -362,7 +375,7 @@ class _NotificationIconifyButton extends StatelessWidget {
                 size: 20,
                 color: Colors.black.withOpacity(0.95),
               ),
-            ), 
+            ),
             if (showDot)
               Positioned(
                 top: 9,
@@ -384,23 +397,16 @@ class _NotificationIconifyButton extends StatelessWidget {
   }
 }
 
-/* --------------------------- SECTIONS ---------------------------- */
+/* --------------------------- COMPOSANTS ---------------------------- */
 
 class _SectionHeader extends StatelessWidget {
   final String title;
-  final String? action; // ✅ optionnel
-  final VoidCallback? onTap; // ✅ optionnel
-
-  const _SectionHeader({
-    required this.title,
-    this.action,
-    this.onTap,
-  });
+  final String? action;
+  final VoidCallback? onTap;
+  const _SectionHeader({required this.title, this.action, this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    final showAction = action != null && onTap != null;
-
     return Row(
       children: [
         Text(
@@ -408,18 +414,14 @@ class _SectionHeader extends StatelessWidget {
           style: AppTextStyles.textnoir.copyWith(fontWeight: FontWeight.w700),
         ),
         const Spacer(),
-        if (showAction)
+        if (action != null)
           InkWell(
             onTap: onTap,
-            borderRadius: BorderRadius.circular(10),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-              child: Text(
-                action!,
-                style: AppTextStyles.textnoir.copyWith(
-                  color: AppColors.vert,
-                  fontWeight: FontWeight.w700,
-                ),
+            child: Text(
+              action!,
+              style: AppTextStyles.textnoir.copyWith(
+                color: AppColors.vert,
+                fontWeight: FontWeight.w700,
               ),
             ),
           ),
@@ -430,7 +432,6 @@ class _SectionHeader extends StatelessWidget {
 
 class _CardContainer extends StatelessWidget {
   final Widget child;
-
   const _CardContainer({required this.child});
 
   @override
@@ -454,10 +455,7 @@ class _CardContainer extends StatelessWidget {
 }
 
 class _ListRow extends StatelessWidget {
-  final String leadingImage;
-  final String title;
-  final String subtitle;
-
+  final String leadingImage, title, subtitle;
   const _ListRow({
     required this.leadingImage,
     required this.title,
@@ -476,10 +474,10 @@ class _ListRow extends StatelessWidget {
             children: [
               Text(
                 title,
-                style:
-                    AppTextStyles.textnoir.copyWith(fontWeight: FontWeight.w700),
+                style: AppTextStyles.textnoir.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
               ),
-              const SizedBox(height: 2),
               Text(subtitle, style: AppTextStyles.textgris2),
             ],
           ),
@@ -492,9 +490,7 @@ class _ListRow extends StatelessWidget {
 class _Avatar extends StatelessWidget {
   final String image;
   final double size;
-
   const _Avatar({required this.image, required this.size});
-
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -508,7 +504,7 @@ class _Avatar extends StatelessWidget {
   }
 }
 
-/* ------------------------- BOTTOM BAR ---------------------------- */
+/* ------------------------- BARRE DE NAVIGATION ---------------------------- */
 
 class _BottomBar extends StatelessWidget {
   final double height;
@@ -531,7 +527,6 @@ class _BottomBar extends StatelessWidget {
       height: height,
       padding: EdgeInsets.zero,
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Expanded(
             child: _NavItem(
@@ -577,12 +572,9 @@ class _BottomBar extends StatelessWidget {
 }
 
 class _NavItem extends StatelessWidget {
-  final String label;
-  final String iconSelected;
-  final String iconUnselected;
+  final String label, iconSelected, iconUnselected;
   final bool selected;
   final VoidCallback onTap;
-
   const _NavItem({
     required this.label,
     required this.iconSelected,
@@ -594,51 +586,36 @@ class _NavItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = selected ? AppColors.vert : AppColors.gris3;
-
     return InkWell(
       onTap: onTap,
-      child: Center(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 4),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Iconify(
-                selected ? iconSelected : iconUnselected,
-                size: 22,
-                color: color,
-              ),
-              const SizedBox(height: 2),
-              Text(
-                label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: AppTextStyles.textgris.copyWith(
-                  color: color,
-                  fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                  fontSize: 10,
-                  height: 1.0,
-                ),
-              ),
-            ],
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Iconify(
+            selected ? iconSelected : iconUnselected,
+            size: 22,
+            color: color,
           ),
-        ),
+          Text(
+            label,
+            style: AppTextStyles.textgris.copyWith(
+              color: color,
+              fontSize: 10,
+              fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+            ),
+          ),
+        ],
       ),
     );
   }
 }
 
-/* --------------------------- MODELS ------------------------------ */
-
 class _AlertItem {
-  final String title;
-  final String date;
+  final String title, date;
   const _AlertItem({required this.title, required this.date});
 }
 
 class _DiagItem {
-  final String label;
-  final String date;
+  final String label, date;
   const _DiagItem({required this.label, required this.date});
 }

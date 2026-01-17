@@ -19,11 +19,14 @@ class AppImages {
   static const String nuage = "assets/images/Icônes/nuage.svg";
   static const String pluie = "assets/images/Icônes/pluie.svg";
   static const String profil = "assets/images/Icônes/profil.svg";
-  static const String recommandation = "assets/images/Icônes/recommandation.svg";
+  static const String recommandation =
+      "assets/images/Icônes/recommandation.svg";
   static const String secheresse = "assets/images/Icônes/secheresse.svg";
+  static const String champ = "assets/images/champ.webp";
+  static const String agriculteur = "assets/images/Agriculteur.webp";
 
   //onboarding
   static const String onBoarding1 = "assets/images/Onboarding/1.png";
-  static const String onBoarding2 = "assets/images/Onboarding/2.png"; 
+  static const String onBoarding2 = "assets/images/Onboarding/2.png";
   static const String onBoarding3 = "assets/images/Onboarding/3.png";
 }
