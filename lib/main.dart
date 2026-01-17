@@ -12,6 +12,7 @@ import 'screens/auth/login_screen.dart';
 import 'screens/auth/signup_screen.dart';
 import 'screens/auth/champ_create_screen.dart';
 import 'screens/home/home_screen.dart';
+import 'screens/notification/notification_screen.dart';
 
 import 'package:camera/camera.dart';
 import 'screens/IA/scanner_page.dart';
@@ -51,6 +52,7 @@ class MainApp extends StatelessWidget {
         AppRoutes.modifieProfil: (context) => const EditProfileScreen(),
         AppRoutes.modifieChamp: (context) => const ModifieChampPage(),
         AppRoutes.meteo: (context) => const WeatherPage(),
+        AppRoutes.notifications: (context) => const NotificationScreen(),
       },
     );
   }

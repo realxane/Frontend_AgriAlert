@@ -7,7 +7,7 @@ import 'package:iconsax/iconsax.dart';
 import '../../constants/app_colors.dart';
 import '../../constants/app_text_styles.dart';
 import '../../constants/app_images.dart';
-
+import 'package:agri_alert/routes/app_routes.dart';
 import '../Recommandation/recommandation_page.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -123,6 +123,7 @@ class _HomeContentState extends State<_HomeContent> {
         : _diagnostics.take(_maxDiagnosticsPreview).toList();
 
     return SafeArea(
+      top: false,
       bottom: false,
       child: Column(
         children: [
@@ -131,10 +132,9 @@ class _HomeContentState extends State<_HomeContent> {
             subtitle: 'Commence tes activités agricoles',
             temperature: '29°',
             condition: 'Cloudy',
-            topPadding: 18,
             sidePadding: 16,
             height: media.size.height * 0.2,
-            onNotificationTap: () {},
+            onNotificationTap: () {Navigator.pushNamed(context, AppRoutes.notifications);},
             showNotificationDot: true,
           ),
           Expanded(
@@ -210,7 +210,7 @@ class _HomeContentState extends State<_HomeContent> {
 
 class _Header extends StatelessWidget {
   final String userName, subtitle, temperature, condition;
-  final double height, topPadding, sidePadding;
+  final double height, sidePadding;
   final VoidCallback onNotificationTap;
   final bool showNotificationDot;
 
@@ -219,8 +219,7 @@ class _Header extends StatelessWidget {
     required this.subtitle,
     required this.temperature,
     required this.condition,
-    required this.height,
-    required this.topPadding,
+    required this.height, 
     required this.sidePadding,
     required this.onNotificationTap,
     required this.showNotificationDot,
@@ -228,24 +227,31 @@ class _Header extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final double topPaddingFromSystem = MediaQuery.of(context).padding.top;
+
+    final double totalHeight = height + topPaddingFromSystem;
+
     return SizedBox(
-      height: height,
+      height: totalHeight,
       child: Stack(
         children: [
-          Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                stops: const [0.6, 1.0],
-                colors: [AppColors.vert, AppColors.bleu],
-              ),
-              borderRadius: const BorderRadius.only(
-                bottomLeft: Radius.circular(26),
-                bottomRight: Radius.circular(26),
+          Positioned.fill(
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  stops: const [0.6, 1.0],
+                  colors: [AppColors.vert, AppColors.bleu],
+                ),
+                borderRadius: const BorderRadius.only(
+                  bottomLeft: Radius.circular(26),
+                  bottomRight: Radius.circular(26),
+                ),
               ),
             ),
           ),
+
           Positioned(
             top: -20,
             right: -10,
@@ -258,10 +264,11 @@ class _Header extends StatelessWidget {
               ),
             ),
           ),
+
           Padding(
             padding: EdgeInsets.fromLTRB(
               sidePadding,
-              topPadding,
+              topPaddingFromSystem + 12, 
               sidePadding,
               12,
             ),
@@ -411,11 +418,11 @@ class _SectionHeader extends StatelessWidget {
       children: [
         Text(
           title,
-          style: AppTextStyles.textnoir.copyWith(fontWeight: FontWeight.w700),
+          style: AppTextStyles.textnoir.copyWith(fontWeight: FontWeight.w700, fontSize: 18),
         ),
         const Spacer(),
         if (action != null)
-          InkWell(
+          InkWell( 
             onTap: onTap,
             child: Text(
               action!,
@@ -475,10 +482,10 @@ class _ListRow extends StatelessWidget {
               Text(
                 title,
                 style: AppTextStyles.textnoir.copyWith(
-                  fontWeight: FontWeight.w700,
+                  fontWeight: FontWeight.w700, fontSize: 16
                 ),
               ),
-              Text(subtitle, style: AppTextStyles.textgris2),
+              Text(subtitle, style: AppTextStyles.textgris2.copyWith(fontSize: 16)),
             ],
           ),
         ),

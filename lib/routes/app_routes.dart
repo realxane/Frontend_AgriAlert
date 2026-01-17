@@ -27,4 +27,6 @@ class AppRoutes {
   static const String modifieChamp = '/modifie_champ_page';
   //page météo
   static const String meteo = '/meteo';
+  //page notifications
+  static const String notifications = '/notifications';
 }

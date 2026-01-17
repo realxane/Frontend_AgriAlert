@@ -13,15 +13,15 @@ class AppImages {
   static const String scan = "assets/images/scan.png";
 
   //icônes
-  static const String home = "assets/images/Icônes/home.svg";
-  static const String inondation = "assets/images/Icônes/inondation.svg";
-  static const String meteo = "assets/images/Icônes/météo.svg";
-  static const String nuage = "assets/images/Icônes/nuage.svg";
-  static const String pluie = "assets/images/Icônes/pluie.svg";
-  static const String profil = "assets/images/Icônes/profil.svg";
+  static const String home = "assets/images/Icones/home.svg";
+  static const String inondation = "assets/images/Icones/inondation.svg";
+  static const String meteo = "assets/images/Icones/meteo.svg";
+  static const String nuage = "assets/images/Icones/nuage.svg";
+  static const String pluie = "assets/images/Icones/pluie.svg";
+  static const String profil = "assets/images/Icones/profil.svg";
   static const String recommandation =
-      "assets/images/Icônes/recommandation.svg";
-  static const String secheresse = "assets/images/Icônes/secheresse.svg";
+      "assets/images/Icones/recommandation.svg";
+  static const String secheresse = "assets/images/Icones/secheresse.svg";
   static const String champ = "assets/images/champ.webp";
   static const String agriculteur = "assets/images/Agriculteur.webp";
 

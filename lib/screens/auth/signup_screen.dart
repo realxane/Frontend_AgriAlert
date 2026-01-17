@@ -21,7 +21,7 @@ class SignupScreen extends StatelessWidget {
     final double gray1Height = headerHeight + headerHeight * 0.20;
     final double gray2Height = headerHeight + headerHeight * 0.40;
 
-    final double contentTopPadding = headerHeight - greenY1 + 90;
+    final double contentTopPadding = headerHeight - greenY1 + 95;
 
     return Scaffold(
       backgroundColor: Colors.white,

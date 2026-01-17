@@ -24,7 +24,7 @@ class LoginScreen extends StatelessWidget {
     final double gray2Height = headerHeight + headerHeight * 0.40;
 
     // On démarre le contenu sous la zone des vagues
-    final double contentTopPadding = headerHeight - greenY1 + 100;
+    final double contentTopPadding = headerHeight - greenY1 + 120;
 
     return Scaffold(
       backgroundColor: Colors.white,
