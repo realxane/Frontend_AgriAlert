@@ -1,3 +1,5 @@
+import 'package:agri_alert/constants/app_colors.dart';
+import 'package:agri_alert/constants/app_images.dart';
 import 'package:agri_alert/models/model_meteo.dart';
 import 'package:agri_alert/screens/meteo/carte_meteo.dart';
 import 'package:flutter/material.dart';
@@ -23,53 +25,90 @@ class _WeatherPageState extends State<WeatherPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF8F8F8),
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const SizedBox(height: 20),
-              const Center(
-                child: Text(
-                  "Historiques des météos",
-                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-                ),
+      body: Stack(
+        children: [
+          // 1. Fond vert en haut (Header)
+          Container(
+            height: MediaQuery.of(context).size.height * 0.25,
+            decoration: const BoxDecoration(
+              color: AppColors.vert, // Couleur verte de la maquette
+              borderRadius: BorderRadius.only(
+                bottomLeft: Radius.circular(30),
+                bottomRight: Radius.circular(30),
               ),
-              const SizedBox(height: 30),
-              Text(
-                selectedDay.dayName,
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 15),
-
-              // Appel du widget de la carte
-              WeatherCardDetail(
-                dayData: selectedDay,
-                key: ValueKey(selectedDay.dayName),
-              ),
-
-              const SizedBox(height: 10),
-              Align(
-                alignment: Alignment.centerRight,
-                child: TextButton(
-                  onPressed: () => _showSevenDaysForecast(),
-                  child: const Text(
-                    "Voir plus",
-                    style: TextStyle(
-                      color: Color(0xFF7B78FF),
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                    ),
-                  ),
-                ),
-              ),
-            ],
+            ),
           ),
-        ),
+
+          // 2. Motif de feuille en haut à droite
+          Positioned(
+            top: 10,
+            right: 0,
+            child: Image.asset(
+              AppImages.feuille,
+              height: 80,
+              opacity: const AlwaysStoppedAnimation(0.5),
+            ),
+          ),
+
+          // 3. Contenu de la page
+          SafeArea(
+            child: SingleChildScrollView(
+              // Permet de faire défiler toute la page
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const SizedBox(height: 20),
+                    const Center(
+                      child: Text(
+                        "Historiques des météos",
+                        style: TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black, // Texte visible sur le vert
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 30),
+                    Text(
+                      selectedDay.dayName,
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 15),
+
+                    // Appel du widget de la carte
+                    WeatherCardDetail(
+                      dayData: selectedDay,
+                      key: ValueKey(selectedDay.dayName),
+                    ),
+
+                    const SizedBox(height: 10),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton(
+                        onPressed: () => _showSevenDaysForecast(),
+                        child: const Text(
+                          "Voir plus",
+                          style: TextStyle(
+                            color: Color(0xFF7B78FF),
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
+                        ),
+                      ),
+                    ),
+                    // Espace supplémentaire en bas pour le confort
+                    const SizedBox(height: 100),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -78,12 +117,15 @@ class _WeatherPageState extends State<WeatherPage> {
   void _showSevenDaysForecast() {
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true, // Permet au panneau de mieux s'adapter
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
       ),
       builder: (context) {
         return Container(
           padding: const EdgeInsets.all(20),
+          // Limite la hauteur à 70% de l'écran pour garder le style
+          height: MediaQuery.of(context).size.height * 0.7,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -101,9 +143,9 @@ class _WeatherPageState extends State<WeatherPage> {
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 15),
-              Flexible(
+              Expanded(
+                // Utilisation de Expanded au lieu de Flexible pour la liste
                 child: ListView.builder(
-                  shrinkWrap: true,
                   itemCount: forecastData.length,
                   itemBuilder: (context, index) {
                     final day = forecastData[index];
@@ -144,7 +186,7 @@ class _WeatherPageState extends State<WeatherPage> {
   }
 }
 
-// --- DONNÉES FICTIVES POUR LES 7 JOURS ---
+// --- TES DONNÉES (NON MODIFIÉES) ---
 final List<WeatherDay> forecastData = [
   WeatherDay(
     dayName: "Aujourd'hui",
@@ -236,7 +278,6 @@ final List<WeatherDay> forecastData = [
       ),
     ],
   ),
-
   WeatherDay(
     dayName: "Jeudi",
     status: "Cloudly",
