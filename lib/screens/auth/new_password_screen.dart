@@ -5,11 +5,90 @@ import 'package:agri_alert/constants/app_text_styles.dart';
 import 'package:agri_alert/widgets/auth_text_field.dart';
 import 'package:agri_alert/widgets/orange_button.dart';
 
-class NewPasswordScreen extends StatelessWidget {
+//  Ajouts pour l'intégration backend
+import 'package:agri_alert/config/app_config.dart';
+import 'package:agri_alert/services/api_client.dart';
+import 'package:agri_alert/routes/app_routes.dart';
+
+class NewPasswordScreen extends StatefulWidget {
   const NewPasswordScreen({super.key});
 
   @override
+  State<NewPasswordScreen> createState() => _NewPasswordScreenState();
+}
+
+class _NewPasswordScreenState extends State<NewPasswordScreen> {
+  final _tokenCtrl = TextEditingController();
+  final _pass1Ctrl = TextEditingController();
+  final _pass2Ctrl = TextEditingController();
+
+  bool _loading = false;
+  final _api = ApiClient(baseUrl: AppConfig.baseUrl);
+
+  @override
+  void dispose() {
+    _tokenCtrl.dispose();
+    _pass1Ctrl.dispose();
+    _pass2Ctrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _resetPassword(String email) async {
+    final token = _tokenCtrl.text.trim();
+    final p1 = _pass1Ctrl.text;
+    final p2 = _pass2Ctrl.text;
+
+    if (token.isEmpty || p1.isEmpty || p2.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Veuillez remplir tous les champs.")),
+      );
+      return;
+    }
+
+    if (p1 != p2) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Les mots de passe ne correspondent pas.")),
+      );
+      return;
+    }
+
+    setState(() => _loading = true);
+
+    try {
+     
+      await _api.post(
+        '/api/auth/reset-password',
+        body: {
+          'token': token,
+          'email': email,
+          'motdepasse': p1,
+          'motdepasse_confirmation': p2,
+        },
+      );
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Mot de passe réinitialisé avec succès.")),
+      );
+
+      Navigator.pushNamedAndRemoveUntil(context, AppRoutes.connecter, (_) => false);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Erreur: $e")),
+      );
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    // Email reçu du screen précédent (ForgotPasswordScreen)
+    final args = ModalRoute.of(context)?.settings.arguments;
+    final email = (args is Map && args['email'] != null) ? args['email'].toString() : '';
+
     final size = MediaQuery.sizeOf(context);
 
     final double headerHeight = (size.height * 0.25).clamp(250.0, 340.0);
@@ -107,30 +186,42 @@ class NewPasswordScreen extends StatelessWidget {
 
                   const SizedBox(height: 22),
 
-                  Text('Mot de passe', style: AppTextStyles.textnoir),
+                  // ✅ Token (obligatoire côté backend)
+                  Text('Token', style: AppTextStyles.textnoir),
                   const SizedBox(height: 8),
-                  const AuthTextField(
-                    hintText: 'Entrez le nouveau mot de passe',
-                    obscureText: true,
+                  AuthTextField(
+                    hintText: 'Collez le token reçu par email',
+                    controller: _tokenCtrl,
+                    textInputAction: TextInputAction.next,
                   ),
 
                   const SizedBox(height: 14),
 
                   Text('Mot de passe', style: AppTextStyles.textnoir),
                   const SizedBox(height: 8),
-                  const AuthTextField(
+                  AuthTextField(
+                    hintText: 'Entrez le nouveau mot de passe',
+                    obscureText: true,
+                    controller: _pass1Ctrl,
+                    textInputAction: TextInputAction.next,
+                  ),
+
+                  const SizedBox(height: 14),
+
+                  Text('Mot de passe', style: AppTextStyles.textnoir),
+                  const SizedBox(height: 8),
+                  AuthTextField(
                     hintText: 'Confirmez le nouveau mot de passe',
                     obscureText: true,
                     textInputAction: TextInputAction.done,
+                    controller: _pass2Ctrl,
                   ),
 
                   const SizedBox(height: 18),
 
                   OrangeButton(
-                    label: 'Enregistrer le mot de passe',
-                    onPressed: () {
-                      // TODO: envoyer le mail (Firebase/Auth/etc.)
-                    },
+                    label: _loading ? '...' : 'Enregistrer le mot de passe',
+                    onPressed: _loading ? null : () => _resetPassword(email),
                   ),
 
                   const SizedBox(height: 26),
@@ -159,8 +250,8 @@ class NewPasswordScreen extends StatelessWidget {
 }
 
 class _WaveClipper extends CustomClipper<Path> {
-  final double y1; 
-  final double y2; 
+  final double y1;
+  final double y2;
 
   _WaveClipper({required this.y1, required this.y2});
 

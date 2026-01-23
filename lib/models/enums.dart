@@ -24,9 +24,6 @@ enum ActiviteType {
 
 /// Noms de culture 
 enum NomCulture {
-  riz,
-  mais,
-  mil,
   pommeDeTerre,
   citron,
   orange,
@@ -34,7 +31,7 @@ enum NomCulture {
   fraise,
   raisin,
   papaye,
-  sorgho,
   pomme,
   tomate,
+  mangue
 }

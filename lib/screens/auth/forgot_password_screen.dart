@@ -6,8 +6,68 @@ import 'package:agri_alert/constants/app_text_styles.dart';
 import 'package:agri_alert/widgets/auth_text_field.dart';
 import 'package:agri_alert/widgets/orange_button.dart';
 
-class ForgotPasswordScreen extends StatelessWidget {
+// Ajouts pour l'intégration backend
+import 'package:agri_alert/config/app_config.dart';
+import 'package:agri_alert/services/api_client.dart';
+
+class ForgotPasswordScreen extends StatefulWidget {
   const ForgotPasswordScreen({super.key});
+
+  @override
+  State<ForgotPasswordScreen> createState() => _ForgotPasswordScreenState();
+}
+
+class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
+  // controller email
+  final _emailCtrl = TextEditingController();
+  bool _loading = false;
+
+  final _api = ApiClient(baseUrl: AppConfig.baseUrl);
+
+  @override
+  void dispose() {
+    _emailCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _sendResetLink() async {
+    final email = _emailCtrl.text.trim();
+
+    if (email.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Veuillez entrer votre email.")),
+      );
+      return;
+    }
+
+    setState(() => _loading = true);
+
+    try {
+      await _api.post(
+        '/api/auth/forgot-password',
+        body: {'email': email},
+      );
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Si l'email existe, un lien a été envoyé.")),
+      );
+
+      Navigator.pushNamed(
+        context,
+        AppRoutes.newPassword,
+        arguments: {'email': email},
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Erreur: $e")),
+      );
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -110,20 +170,18 @@ class ForgotPasswordScreen extends StatelessWidget {
 
                   Text('Email', style: AppTextStyles.textnoir),
                   const SizedBox(height: 8),
-                  const AuthTextField(
+                  AuthTextField(
                     hintText: 'Entrez votre email',
                     keyboardType: TextInputType.emailAddress,
                     textInputAction: TextInputAction.done,
+                    controller: _emailCtrl,
                   ),
 
                   const SizedBox(height: 18),
 
                   OrangeButton(
-                    label: 'Envoyer le lien de réinitialisation',
-                    onPressed: () {
-                      // TODO: envoyer le mail (Firebase/Auth/etc.)
-                      Navigator.pushNamed(context, AppRoutes.newPassword);
-                    },
+                    label: _loading ? '...' : 'Envoyer le lien de réinitialisation',
+                    onPressed: _loading ? null : _sendResetLink,
                   ),
 
                   const SizedBox(height: 26),
@@ -152,8 +210,8 @@ class ForgotPasswordScreen extends StatelessWidget {
 }
 
 class _WaveClipper extends CustomClipper<Path> {
-  final double y1; 
-  final double y2; 
+  final double y1;
+  final double y2;
 
   _WaveClipper({required this.y1, required this.y2});
 

@@ -4,12 +4,12 @@ import '../../constants/app_text_styles.dart';
 
 class OrangeButton extends StatelessWidget {
   final String label;
-  final VoidCallback onPressed;
+  final VoidCallback? onPressed;
 
   const OrangeButton({
     super.key,
     required this.label,
-    required this.onPressed,
+    this.onPressed,
   });
 
   @override

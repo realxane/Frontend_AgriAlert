@@ -61,12 +61,6 @@ class _ModifieChampScreenState extends State<ModifieChampPage> {
 
   String _cultureLabel(NomCulture c) {
     switch (c) {
-      case NomCulture.riz:
-        return 'Riz';
-      case NomCulture.mais:
-        return 'Maïs';
-      case NomCulture.mil:
-        return 'Mil';
       case NomCulture.pommeDeTerre:
         return 'Pomme de terre';
       case NomCulture.citron:
@@ -81,12 +75,12 @@ class _ModifieChampScreenState extends State<ModifieChampPage> {
         return 'Raisin';
       case NomCulture.papaye:
         return 'Papaye';
-      case NomCulture.sorgho:
-        return 'Sorgho';
       case NomCulture.pomme:
         return 'Pomme';
       case NomCulture.tomate:
         return 'Tomate';
+      case NomCulture.mangue:
+        return 'Mangue';
     }
   }
 

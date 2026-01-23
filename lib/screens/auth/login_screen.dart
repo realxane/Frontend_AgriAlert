@@ -6,8 +6,77 @@ import 'package:agri_alert/constants/app_text_styles.dart';
 import 'package:agri_alert/widgets/auth_text_field.dart';
 import 'package:agri_alert/widgets/orange_button.dart';
 
-class LoginScreen extends StatelessWidget {
+//  Ajouts pour l'intégration backend
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:agri_alert/config/app_config.dart';
+import 'package:agri_alert/services/api_client.dart';
+
+class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
+
+  @override
+  State<LoginScreen> createState() => _LoginScreenState();
+}
+
+class _LoginScreenState extends State<LoginScreen> {
+  //  Controllers pour lire les champs
+  final _loginCtrl = TextEditingController(); // email OU téléphone
+  final _passCtrl = TextEditingController();
+
+  bool _loading = false;
+
+  final _api = ApiClient(baseUrl: AppConfig.baseUrl);
+  static const _storage = FlutterSecureStorage();
+
+  @override
+  void dispose() {
+    _loginCtrl.dispose();
+    _passCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _doLogin() async {
+    final login = _loginCtrl.text.trim();
+    final pass = _passCtrl.text;
+
+    if (login.isEmpty || pass.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Veuillez remplir tous les champs.")),
+      );
+      return;
+    }
+
+    setState(() => _loading = true);
+
+    try {
+      final res = await _api.post(
+        '/api/auth/login',
+        body: {
+          'login': login, // email OU téléphone
+          'motdepasse': pass,
+        },
+      );
+
+      final token = res['access_token'] as String?;
+      if (token == null || token.isEmpty) {
+        throw Exception("access_token manquant dans la réponse.");
+      }
+
+      //  Sauvegarde token pour les routes protégées auth:sanctum
+      await _storage.write(key: 'access_token', value: token);
+
+      if (!mounted) return;
+
+      Navigator.pushNamedAndRemoveUntil(context, AppRoutes.accueil, (_) => false);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Erreur connexion: $e")),
+      );
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -117,20 +186,27 @@ class LoginScreen extends StatelessWidget {
 
                   const SizedBox(height: 22),
 
-                  // Label Nom
-                  Text('Nom', style: AppTextStyles.textnoir),
+                  // Label Email
+                  Text('Email', style: AppTextStyles.textnoir),
                   const SizedBox(height: 8),
-                  const AuthTextField(hintText: 'Entrez votre nom'),
+
+                  // Backend attend "login" = email OU téléphone
+                  AuthTextField(
+                    hintText: 'Entrez votre email ou téléphone',
+                    controller: _loginCtrl,
+                    keyboardType: TextInputType.text,
+                  ),
 
                   const SizedBox(height: 14),
 
                   // Label Mot de passe
                   Text('Mot de passe', style: AppTextStyles.textnoir),
                   const SizedBox(height: 8),
-                  const AuthTextField(
+                  AuthTextField(
                     hintText: 'Entrez votre mot de passe',
                     obscureText: true,
                     textInputAction: TextInputAction.done,
+                    controller: _passCtrl,
                   ),
 
                   const SizedBox(height: 8),
@@ -141,7 +217,9 @@ class LoginScreen extends StatelessWidget {
                     child: GestureDetector(
                       onTap: () {
                         Navigator.pushNamed(
-                            context, AppRoutes.forgotPassword);
+                          context,
+                          AppRoutes.forgotPassword,
+                        );
                       },
                       child: Text(
                         'mot de passe oublié ?',
@@ -156,10 +234,8 @@ class LoginScreen extends StatelessWidget {
 
                   // Bouton
                   OrangeButton(
-                    label: 'Se connecter',
-                    onPressed: () {
-                      // TODO: login
-                    },
+                    label: _loading ? '...' : 'Se connecter',
+                    onPressed: _loading ? null : _doLogin, // ✅ login
                   ),
 
                   const SizedBox(height: 18),
