@@ -1,24 +1,143 @@
 import 'dart:io';
+import 'dart:convert';
+import 'package:agri_alert/config/app_config.dart';
+import 'package:agri_alert/constants/app_images.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:http/http.dart' as http;
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../../constants/app_colors.dart';
 
-class DiagnosticPage extends StatelessWidget {
+class DiagnosticPage extends StatefulWidget {
   final String imagePath;
 
   const DiagnosticPage({super.key, required this.imagePath});
 
-  // Fonction pour ouvrir la galerie
+  @override
+  State<DiagnosticPage> createState() => _DiagnosticPageState();
+}
+
+class _DiagnosticPageState extends State<DiagnosticPage> {
+  final _storage = const FlutterSecureStorage();
+  final TextEditingController _chatCtrl = TextEditingController();
+
+  // On utilise une variable locale pour pouvoir changer l'image si on en choisit une nouvelle
+  late String _currentImagePath;
+  bool _isAnalysing = true;
+  String _maladieDetectee = "Analyse en cours...";
+  String _conseilIA = "L'expert agronome prépare ses conseils...";
+  bool _isSendingChat = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _currentImagePath = widget.imagePath;
+    _runFullDiagnosis();
+  }
+
+  // --- LOGIQUE 1 : DIAGNOSTIC ---
+  Future<void> _runFullDiagnosis() async {
+    setState(() {
+      _isAnalysing = true;
+      _maladieDetectee = "Analyse en cours...";
+    });
+
+    try {
+      final token = await _storage.read(key: 'access_token');
+      var request = http.MultipartRequest(
+        'POST',
+        Uri.parse('${AppConfig.baseUrl}/api/ia/diagnostic'),
+      );
+
+      request.headers.addAll({
+        'Authorization': 'Bearer $token',
+        'Accept': 'application/json',
+      });
+
+      request.files.add(
+        await http.MultipartFile.fromPath('image', _currentImagePath),
+      );
+
+      var streamedResponse = await request.send();
+      var response = await http.Response.fromStream(streamedResponse);
+
+      if (response.statusCode == 200) {
+        final data = json.decode(utf8.decode(response.bodyBytes));
+        setState(() {
+          // Formatage à 2 chiffres après la virgule
+          double confidence = double.parse(
+            data['resultat']['confidence'].toString(),
+          );
+          String confidenceFormatted = confidence.toStringAsFixed(2);
+
+          _maladieDetectee =
+              "${data['resultat']['maladie_detectee']} $confidenceFormatted%";
+          _conseilIA =
+              data['resultat']['recommendation_ia'] ?? "Aucun conseil trouvé.";
+          _isAnalysing = false;
+        });
+      } else {
+        setState(() {
+          _maladieDetectee = "Erreur ${response.statusCode}";
+          _isAnalysing = false;
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _maladieDetectee = "Erreur de connexion";
+        _isAnalysing = false;
+      });
+    }
+  }
+
+  // --- LOGIQUE 2 : CHATBOT ---
+  Future<void> _askChatbot() async {
+    if (_chatCtrl.text.trim().isEmpty) return;
+    setState(() => _isSendingChat = true);
+    final question = _chatCtrl.text.trim();
+    final maladiePure = _maladieDetectee.split(' ').first;
+
+    try {
+      final token = await _storage.read(key: 'access_token');
+      final response = await http.post(
+        Uri.parse('${AppConfig.baseUrl}/api/ia/chatbot'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({
+          'question': question,
+          'maladie_detectee': maladiePure,
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(utf8.decode(response.bodyBytes));
+        setState(() {
+          _conseilIA = data['Reponse'];
+          _chatCtrl.clear();
+        });
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Erreur Chatbot: $e")));
+    } finally {
+      setState(() => _isSendingChat = false);
+    }
+  }
+
+  // --- LOGIQUE 3 : NOUVELLE IMAGE ---
   Future<void> _pickGalleryImage(BuildContext context) async {
     final ImagePicker picker = ImagePicker();
     try {
       final XFile? image = await picker.pickImage(source: ImageSource.gallery);
       if (image != null) {
-        debugPrint("Nouvelle image choisie : ${image.path}");
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Image sélectionnée pour analyse...")),
-        );
+        setState(() {
+          _currentImagePath = image.path;
+        });
+        _runFullDiagnosis(); // Relance l'analyse automatiquement
       }
     } catch (e) {
       debugPrint("Erreur lors de la sélection : $e");
@@ -58,6 +177,17 @@ class DiagnosticPage extends StatelessWidget {
                     ),
                   ),
                 ),
+
+                Positioned(
+                  top: 10,
+                  right: 0,
+                  child: Image.asset(
+                    AppImages.feuille,
+                    height: 80,
+                    opacity: const AlwaysStoppedAnimation(0.5),
+                  ),
+                ),
+
                 Padding(
                   padding: const EdgeInsets.only(top: 20, left: 20, right: 20),
                   child: Container(
@@ -79,7 +209,7 @@ class DiagnosticPage extends StatelessWidget {
                             top: Radius.circular(30),
                           ),
                           child: Image.file(
-                            File(imagePath),
+                            File(_currentImagePath),
                             height: 250,
                             width: double.infinity,
                             fit: BoxFit.cover,
@@ -105,13 +235,21 @@ class DiagnosticPage extends StatelessWidget {
                             border: Border.all(color: Colors.black),
                             borderRadius: BorderRadius.circular(20),
                           ),
-                          child: const Text(
-                            "Mildiou 98%",
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
+                          child: _isAnalysing
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : Text(
+                                  _maladieDetectee,
+                                  style: const TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
                         ),
                       ],
                     ),
@@ -158,20 +296,22 @@ class DiagnosticPage extends StatelessWidget {
                       ],
                     ),
                     const SizedBox(height: 15),
-                    const Text(
-                      "Retirez immédiatement les feuilles infectées et évitez d'arroser le feuillage le soir pour limiter l'humidité, car cela favorise la propagation du champignon.",
-                      style: TextStyle(
+                    Text(
+                      _conseilIA,
+                      style: const TextStyle(
                         fontSize: 14,
                         color: Colors.black87,
                         height: 1.5,
                       ),
                     ),
                     const SizedBox(height: 20),
-
-                    // --- CHAMP DE TEXTE CHATBOT ---
                     TextField(
+                      controller: _chatCtrl,
+                      onSubmitted: (_) => _askChatbot(),
                       decoration: InputDecoration(
-                        hintText: "Demander à votre assistant agricole",
+                        hintText: _isSendingChat
+                            ? "L'expert réfléchit..."
+                            : "Demander à votre assistant agricole",
                         hintStyle: const TextStyle(
                           fontSize: 13,
                           color: Colors.grey,
@@ -182,6 +322,10 @@ class DiagnosticPage extends StatelessWidget {
                             color: Colors.black54,
                           ),
                           onPressed: () => _pickGalleryImage(context),
+                        ),
+                        suffixIcon: IconButton(
+                          icon: const Icon(Icons.send, color: AppColors.vert),
+                          onPressed: _askChatbot,
                         ),
                         filled: true,
                         fillColor: Colors.grey.shade100,
