@@ -11,7 +11,10 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:agri_alert/config/app_config.dart';
 import 'package:agri_alert/services/api_client.dart';
 
-class LoginScreen extends StatefulWidget {
+//  Ajout Google Sign-In
+import 'package:google_sign_in/google_sign_in.dart';
+
+class LoginScreen extends StatefulWidget { 
   const LoginScreen({super.key});
 
   @override
@@ -27,6 +30,12 @@ class _LoginScreenState extends State<LoginScreen> {
 
   final _api = ApiClient(baseUrl: AppConfig.baseUrl);
   static const _storage = FlutterSecureStorage();
+
+  //  Google sign in
+  final GoogleSignIn _googleSignIn = GoogleSignIn(
+    scopes: <String>['email', 'profile'],
+  );
+
 
   @override
   void dispose() {
@@ -77,6 +86,66 @@ class _LoginScreenState extends State<LoginScreen> {
       if (mounted) setState(() => _loading = false);
     }
   }
+
+  //  Connexion Google -> backend
+  //  Connexion Google -> backend
+Future<void> _doGoogleLogin() async {
+  if (_loading) return;
+  setState(() => _loading = true);
+
+  try {
+    // 1) Ouvrir la fenêtre Google (flow classique)
+    await _googleSignIn.signOut();
+    final googleUser = await _googleSignIn.signIn();
+
+    if (googleUser == null) {
+      // L’utilisateur a annulé
+      return;
+    }
+
+    // 2) Obtenir les tokens Google
+    final auth = await googleUser.authentication;
+
+    // IMPORTANT : ton backend Socialite attend "access_token"
+    final googleAccessToken = auth.accessToken;
+
+    if (googleAccessToken == null || googleAccessToken.isEmpty) {
+      throw Exception(
+        "Google n'a pas retourné d'accessToken. Vérifie SHA-1 + package name + configuration OAuth Android.",
+      );
+    }
+
+    // 3) Envoyer l'access token Google à Laravel
+    final res = await _api.post(
+      '/api/auth/google/callback',
+      body: {
+        'access_token': googleAccessToken,
+      },
+    );
+
+    final token = res['access_token'] as String?;
+    if (token == null || token.isEmpty) {
+      throw Exception("access_token Sanctum manquant dans la réponse.");
+    }
+
+    // 4) Sauvegarder le token Sanctum
+    await _storage.write(key: 'access_token', value: token);
+
+    if (!mounted) return;
+
+    // 5) Aller à l'accueil
+    Navigator.pushNamedAndRemoveUntil(context, AppRoutes.accueil, (_) => false);
+  } catch (e) {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text("Erreur Google: $e")),
+    );
+  } finally {
+    if (mounted) setState(() => _loading = false);
+  }
+}
+
 
   @override
   Widget build(BuildContext context) {
@@ -235,7 +304,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   // Bouton
                   OrangeButton(
                     label: _loading ? '...' : 'Se connecter',
-                    onPressed: _loading ? null : _doLogin, // ✅ login
+                    onPressed: _loading ? null : _doLogin, //  login
                   ),
 
                   const SizedBox(height: 18),
@@ -261,7 +330,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      _SocialIcon(asset: AppImages.google, onTap: () {}),
+                      _SocialIcon(asset: AppImages.google, onTap: _doGoogleLogin),
                       const SizedBox(width: 26),
                       _SocialIcon(asset: AppImages.facebook, onTap: () {}),
                       const SizedBox(width: 26),
