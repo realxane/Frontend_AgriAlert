@@ -14,7 +14,35 @@ class _WeatherCardDetailState extends State<WeatherCardDetail> {
   int _selectedHourIndex = 0;
 
   @override
+  void didUpdateWidget(covariant WeatherCardDetail oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    //  Si on change de jour, on revient à la 1ère heure
+    if (oldWidget.dayData.dayName != widget.dayData.dayName) {
+      _selectedHourIndex = 0;
+    }
+    //  Sécurité : si la liste d'heures a diminué
+    if (_selectedHourIndex >= widget.dayData.hours.length) {
+      _selectedHourIndex = 0;
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    if (widget.dayData.hours.isEmpty) {
+      //  Cas sécurité : si dayData n'a pas d'heures (ex: forecast 7 jours)
+      return Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: const Color(0xFF262626),
+          borderRadius: BorderRadius.circular(30),
+        ),
+        child: const Text(
+          "Pas de détails horaires disponibles.",
+          style: TextStyle(color: Colors.white),
+        ),
+      );
+    }
+
     // On récupère les données de l'heure sélectionnée
     final currentHour = widget.dayData.hours[_selectedHourIndex];
 
@@ -46,7 +74,7 @@ class _WeatherCardDetailState extends State<WeatherCardDetail> {
                   vertical: 6,
                 ),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFD4FF5B), // Vert fluo "Cloudy"
+                  color: const Color(0xFFD4FF5B), 
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
@@ -62,9 +90,9 @@ class _WeatherCardDetailState extends State<WeatherCardDetail> {
           ),
           const SizedBox(height: 20),
 
-          // Température principale
+          // Température principale (temp est un double maintenant)
           Text(
-            "${currentHour.temp}°",
+            "${currentHour.temp.round()}°",
             style: const TextStyle(
               color: Colors.white,
               fontSize: 60,
@@ -73,7 +101,7 @@ class _WeatherCardDetailState extends State<WeatherCardDetail> {
           ),
 
           // Barre de dégradé de température
-          _buildTempBar(currentHour.temp),
+          _buildTempBar(currentHour.temp.round()),
           const SizedBox(height: 20),
 
           // Liste horizontale des heures
@@ -95,7 +123,7 @@ class _WeatherCardDetailState extends State<WeatherCardDetail> {
                     ),
                     child: Center(
                       child: Text(
-                        widget.dayData.hours[index].time,
+                        widget.dayData.hours[index].time, // ✅ "07:40"
                         style: TextStyle(
                           color: isSelected ? Colors.white : Colors.grey,
                           fontSize: 12,
@@ -120,6 +148,7 @@ class _WeatherCardDetailState extends State<WeatherCardDetail> {
   }
 
   Widget _buildTempBar(int temp) {
+    //  Ici c'est une barre visuelle, on peut la rendre dynamique plus tard.
     return Column(
       children: [
         const Padding(
@@ -173,7 +202,7 @@ class _WeatherCardDetailState extends State<WeatherCardDetail> {
         Row(
           children: [
             _infoBox("Rain", "${hour.rain}%"),
-            _infoBox("Wind", "${hour.wind}km/h"),
+            _infoBox("Wind", "${hour.wind.round()}km/h"),
           ],
         ),
       ],

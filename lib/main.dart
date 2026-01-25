@@ -2,7 +2,6 @@ import 'package:agri_alert/routes/app_routes.dart';
 import 'package:agri_alert/screens/Recommandation/recommandation_page.dart';
 import 'package:agri_alert/screens/auth/forgot_password_screen.dart';
 import 'package:agri_alert/screens/auth/new_password_screen.dart';
-import 'package:agri_alert/screens/meteo/meteo_page.dart';
 import 'package:agri_alert/screens/profil/modifie_champ_page.dart';
 import 'package:agri_alert/screens/profil/modifie_profil_page.dart';
 import 'package:flutter/material.dart';
@@ -51,7 +50,6 @@ class MainApp extends StatelessWidget {
         AppRoutes.recommandation: (context) => const RecommandationsScreen(),
         AppRoutes.modifieProfil: (context) => const EditProfileScreen(),
         AppRoutes.modifieChamp: (context) => const ModifieChampPage(),
-        AppRoutes.meteo: (context) => const WeatherPage(),
         AppRoutes.notifications: (context) => const NotificationScreen(),
       },
     );

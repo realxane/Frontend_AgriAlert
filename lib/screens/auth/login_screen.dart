@@ -263,7 +263,7 @@ Future<void> _doGoogleLogin() async {
                   AuthTextField(
                     hintText: 'Entrez votre email ou téléphone',
                     controller: _loginCtrl,
-                    keyboardType: TextInputType.text,
+                    keyboardType: TextInputType.emailAddress,
                   ),
 
                   const SizedBox(height: 14),
