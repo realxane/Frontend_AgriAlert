@@ -3,25 +3,115 @@ import '../../constants/app_colors.dart';
 import '../../constants/app_images.dart';
 import 'recommandation_detail_screen.dart';
 
-class RecommandationsScreen extends StatelessWidget {
+//  backend + parsers
+import 'package:agri_alert/services/recommendation_api.dart';
+import 'package:agri_alert/services/recommendation_parsers.dart';
+import 'package:agri_alert/models/Culture.dart';
+
+class RecommandationsScreen extends StatefulWidget {
   const RecommandationsScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final List<Map<String, String>> cultures = [
-      {"nom": "Tomate", "image": "assets/images/tomate.jpg"},
-      {"nom": "Maïs", "image": "assets/images/mais.webp"},
-      {"nom": "Pommes de terre", "image": "assets/images/pomme_de_terre.webp"},
-      {"nom": "Papaye", "image": "assets/images/papaye.webp"},
-      {"nom": "Orange", "image": "assets/images/orange.png"},
-      {"nom": "Mangue", "image": "assets/images/mangue.jpeg"},
-      {"nom": "Oignon", "image": "assets/images/oignon.jpg"},
-      {"nom": "Piment", "image": "assets/images/piment.jpg"},
-      {"nom": "Papaye", "image": "assets/images/papaye.webp"},
-      {"nom": "Orange", "image": "assets/images/orange.png"},
-      {"nom": "Mangue", "image": "assets/images/mangue.jpeg"},
-    ];
+  State<RecommandationsScreen> createState() => _RecommandationsScreenState();
+}
 
+class _RecommandationsScreenState extends State<RecommandationsScreen> {
+  final _api = RecommendationApi();
+
+  bool _loading = true;
+  String? _error;
+
+  String? _champId;
+  List<Culture> _cultures = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserCultures();
+  }
+
+  Future<void> _loadUserCultures() async {
+    try {
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
+
+      // 1) champs user
+      final champsRes = await _api.getMyChamps();
+      final raw = (champsRes['data'] ?? champsRes['champs'] ?? champsRes);
+
+      if (raw is! List || raw.isEmpty) {
+        throw Exception("Aucun champ trouvé.");
+      }
+
+      final champId = raw[0]['id'].toString();
+      _champId = champId;
+
+      // 2) champ detail (doit contenir plantations + culture)
+      final champRes = await _api.getChamp(champId);
+
+      final champ = (champRes['champ'] ?? champRes['data'] ?? champRes) as Map;
+
+      final plantations = (champ['plantations'] as List? ?? []);
+
+
+      // 3) cultures uniques via plantations.culture
+      final Map<String, Culture> unique = {};
+
+      for (final p in plantations) {
+        final pp = (p as Map).cast<String, dynamic>();
+
+        final cultureJson = (pp['culture'] as Map?)?.cast<String, dynamic>();
+        if (cultureJson != null) {
+          final c = cultureFromJson(cultureJson);
+          unique[c.id] = c;
+        }
+      }
+
+      if (unique.isEmpty) {
+        throw Exception(
+          "Aucune culture trouvée. Vérifie que /api/champs/{id} renvoie plantations.culture.",
+        );
+      }
+
+      setState(() {
+        _cultures = unique.values.toList();
+        _loading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _error = e.toString();
+        _loading = false;
+      });
+    }
+  }
+
+  // image locale si imageUrl null
+  String _fallbackAsset(String nom) {
+    final n = nom.toLowerCase();
+    if (n.contains('tomate')) return "assets/images/tomate.jpg";
+    if (n.contains('maïs') || n.contains('mais')) return "assets/images/mais.webp";
+    if (n.contains('pomme')) return "assets/images/pomme_de_terre.webp";
+    if (n.contains('fraise')) return "assets/images/fraise.jpg";   
+    if (n.contains('raisin')) return "assets/images/raisin.jpg";   
+
+    if (n.contains('pomme de terre') || n.contains('pomme_de_terre')) {
+      return "assets/images/pomme_de_terre.webp";
+    }
+    if (n.contains('papaye')) return "assets/images/papaye.webp";
+    if (n.contains('orange')) return "assets/images/orange.png";
+    if (n.contains('mangue')) return "assets/images/mangue.jpeg";
+    if (n.contains('citron')) return "assets/images/citron.png";
+    if (n.contains('poivre') || n.contains('piment')) return "assets/images/piment.jpg";
+    return "assets/images/tomate.jpg";
+  }
+
+  String _cultureLabel(Culture c) => c.nom.name; // ex: "tomate"
+  // Si tu veux "Tomate": fais une map, mais je laisse simple.
+
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF8F8F8),
       body: Stack(
@@ -80,84 +170,110 @@ class RecommandationsScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 20),
 
-                // --- PARTIE DÉFILANTE (La liste uniquement) ---
                 Expanded(
-                  child: SingleChildScrollView(
-                    physics: const BouncingScrollPhysics(),
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                    child: Column(
-                      children: [
-                        Container(
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(25),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withOpacity(0.05),
-                                blurRadius: 10,
-                                offset: const Offset(0, 5),
+                  child: _loading
+                      ? const Center(child: CircularProgressIndicator())
+                      : (_error != null)
+                          ? Center(
+                              child: Padding(
+                                padding: const EdgeInsets.all(16),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      "Erreur : $_error",
+                                      textAlign: TextAlign.center,
+                                      style: const TextStyle(color: Colors.red),
+                                    ),
+                                    const SizedBox(height: 12),
+                                    ElevatedButton(
+                                      onPressed: _loadUserCultures,
+                                      child: const Text("Réessayer"),
+                                    ),
+                                  ],
+                                ),
                               ),
-                            ],
-                          ),
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(25),
-                            child: ListView.separated(
-                              shrinkWrap: true,
-                              physics: const NeverScrollableScrollPhysics(),
-                              itemCount: cultures.length,
-                              separatorBuilder: (context, index) =>
-                                  const Divider(
-                                    height: 1,
-                                    indent: 20,
-                                    endIndent: 20,
-                                  ),
-                              itemBuilder: (context, index) {
-                                return ListTile(
-                                  contentPadding: const EdgeInsets.symmetric(
-                                    horizontal: 20,
-                                    vertical: 10,
-                                  ),
-                                  leading: CircleAvatar(
-                                    radius: 25,
-                                    backgroundColor: Colors.grey[200],
-                                    backgroundImage: AssetImage(
-                                      cultures[index]["image"]!,
+                            )
+                          : SingleChildScrollView(
+                              physics: const BouncingScrollPhysics(),
+                              padding: const EdgeInsets.symmetric(horizontal: 20),
+                              child: Column(
+                                children: [
+                                  Container(
+                                    decoration: BoxDecoration(
+                                      color: Colors.white,
+                                      borderRadius: BorderRadius.circular(25),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: Colors.black.withOpacity(0.05),
+                                          blurRadius: 10,
+                                          offset: const Offset(0, 5),
+                                        ),
+                                      ],
                                     ),
-                                  ),
-                                  title: Text(
-                                    cultures[index]["nom"]!,
-                                    style: const TextStyle(
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                  trailing: const Icon(
-                                    Icons.arrow_forward_ios,
-                                    size: 16,
-                                    color: Colors.grey,
-                                  ),
-                                  onTap: () {
-                                    Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (context) =>
-                                            RecommandationDetailScreen(
-                                              cultureName:
-                                                  cultures[index]["nom"]!,
+                                    child: ClipRRect(
+                                      borderRadius: BorderRadius.circular(25),
+                                      child: ListView.separated(
+                                        shrinkWrap: true,
+                                        physics: const NeverScrollableScrollPhysics(),
+                                        itemCount: _cultures.length,
+                                        separatorBuilder: (context, index) =>
+                                            const Divider(height: 1, indent: 20, endIndent: 20),
+                                        itemBuilder: (context, index) {
+                                          final c = _cultures[index];
+
+                                          final nomText = _cultureLabel(c);
+                                          final hasNetwork = (c.imageUrl != null && c.imageUrl!.isNotEmpty);
+
+                                          final imgProvider = hasNetwork
+                                              ? NetworkImage(c.imageUrl!)
+                                              : AssetImage(_fallbackAsset(nomText)) as ImageProvider;
+
+                                          return ListTile(
+                                            contentPadding: const EdgeInsets.symmetric(
+                                              horizontal: 20,
+                                              vertical: 10,
                                             ),
+                                            leading: CircleAvatar(
+                                              radius: 25,
+                                              backgroundColor: Colors.grey[200],
+                                              backgroundImage: imgProvider,
+                                            ),
+                                            title: Text(
+                                              nomText,
+                                              style: const TextStyle(
+                                                fontSize: 18,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                            trailing: const Icon(
+                                              Icons.arrow_forward_ios,
+                                              size: 16,
+                                              color: Colors.grey,
+                                            ),
+                                            onTap: () {
+                                              if (_champId == null) return;
+
+                                              Navigator.push(
+                                                context,
+                                                MaterialPageRoute(
+                                                  builder: (context) => RecommandationDetailScreen(
+                                                    champId: _champId!,
+                                                    culture: c,
+                                                    cultureImageProvider: imgProvider,
+                                                  ),
+                                                ),
+                                              );
+                                            },
+                                          );
+                                        },
                                       ),
-                                    );
-                                  },
-                                );
-                              },
+                                    ),
+                                  ),
+                                  const SizedBox(height: 30),
+                                ],
+                              ),
                             ),
-                          ),
-                        ),
-                        // Espace en bas pour éviter que la liste touche la barre de navigation
-                        const SizedBox(height: 30),
-                      ],
-                    ),
-                  ),
                 ),
               ],
             ),
