@@ -10,6 +10,11 @@ import '../../constants/app_images.dart';
 import 'package:agri_alert/routes/app_routes.dart';
 import '../Recommandation/recommandation_page.dart';
 
+// ✅ Ajouts pour récupérer champId backend
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:agri_alert/config/app_config.dart';
+import 'package:agri_alert/services/api_client.dart';
+
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -20,12 +25,94 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int _currentIndex = 0;
 
-  final List<Widget> _pages = [
-    const _HomeContent(),
-    const RecommandationsScreen(),
-    const WeatherPage(),
-    const ProfileScreen(),
-  ];
+  // ✅ API + storage
+  final _api = ApiClient(baseUrl: AppConfig.baseUrl);
+  static const _storage = FlutterSecureStorage();
+
+  String? _champId;
+  bool _champLoading = true;
+  String? _champError;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadChampId();
+  }
+
+  Future<void> _loadChampId() async {
+    try {
+      final token = await _storage.read(key: 'access_token');
+      if (token == null || token.isEmpty) {
+        throw Exception("Token manquant. Connecte-toi d'abord.");
+      }
+
+      // ✅ GET /api/champs
+      final res = await _api.get(
+        '/api/champs',
+        headers: {'Authorization': 'Bearer $token'},
+      );
+
+      // res peut être {data:[...]} ou {champs:[...]} ou directement [...]
+      final raw = (res['data'] ?? res['champs'] ?? res);
+
+      if (raw is! List) {
+        throw Exception("Format inattendu /api/champs : $res");
+      }
+      if (raw.isEmpty) {
+        throw Exception("Aucun champ trouvé pour cet utilisateur.");
+      }
+
+      final firstChampId = raw[0]['id'].toString();
+
+      // Optionnel: sauvegarder
+      await _storage.write(key: 'champ_id', value: firstChampId);
+
+      setState(() {
+        _champId = firstChampId;
+        _champLoading = false;
+        _champError = null;
+      });
+    } catch (e) {
+      setState(() {
+        _champError = e.toString();
+        _champLoading = false;
+      });
+    }
+  }
+
+  List<Widget> get _pages {
+    final weatherPage = _champLoading
+        ? const Center(child: CircularProgressIndicator())
+        : (_champId == null)
+            ? Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        "Impossible de charger le champ.\n$_champError",
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(color: Colors.red),
+                      ),
+                      const SizedBox(height: 12),
+                      ElevatedButton(
+                        onPressed: _loadChampId,
+                        child: const Text("Réessayer"),
+                      ),
+                    ],
+                  ),
+                ),
+              )
+            : WeatherPage(champId: _champId!);
+
+    return [
+      const _HomeContent(),
+      const RecommandationsScreen(),
+      weatherPage,
+      const ProfileScreen(),
+    ];
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -219,7 +306,7 @@ class _Header extends StatelessWidget {
     required this.subtitle,
     required this.temperature,
     required this.condition,
-    required this.height, 
+    required this.height,
     required this.sidePadding,
     required this.onNotificationTap,
     required this.showNotificationDot,
@@ -268,7 +355,7 @@ class _Header extends StatelessWidget {
           Padding(
             padding: EdgeInsets.fromLTRB(
               sidePadding,
-              topPaddingFromSystem + 12, 
+              topPaddingFromSystem + 12,
               sidePadding,
               12,
             ),
@@ -418,11 +505,12 @@ class _SectionHeader extends StatelessWidget {
       children: [
         Text(
           title,
-          style: AppTextStyles.textnoir.copyWith(fontWeight: FontWeight.w700, fontSize: 18),
+          style: AppTextStyles.textnoir.copyWith(
+              fontWeight: FontWeight.w700, fontSize: 18),
         ),
         const Spacer(),
         if (action != null)
-          InkWell( 
+          InkWell(
             onTap: onTap,
             child: Text(
               action!,
@@ -482,10 +570,10 @@ class _ListRow extends StatelessWidget {
               Text(
                 title,
                 style: AppTextStyles.textnoir.copyWith(
-                  fontWeight: FontWeight.w700, fontSize: 16
-                ),
+                    fontWeight: FontWeight.w700, fontSize: 16),
               ),
-              Text(subtitle, style: AppTextStyles.textgris2.copyWith(fontSize: 16)),
+              Text(subtitle,
+                  style: AppTextStyles.textgris2.copyWith(fontSize: 16)),
             ],
           ),
         ),

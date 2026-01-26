@@ -1,6 +1,6 @@
 import 'package:agri_alert/models/enums.dart';
 
-class CultureModel {
+class Culture {
   final String id;
 
   final NomCulture nom; 
@@ -15,7 +15,7 @@ class CultureModel {
   final String? imageUrl;
   final String? description;
 
-  const CultureModel({
+  const Culture({
     required this.id,
     required this.nom,
     this.cycleDate,
