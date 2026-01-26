@@ -45,10 +45,7 @@ class ApiClient {
 
     final resp = await http.get(
       uri,
-      headers: {
-        'Accept': 'application/json',
-        ...?headers,
-      },
+      headers: {'Accept': 'application/json', ...?headers},
     );
 
     final decoded = resp.body.isNotEmpty ? jsonDecode(resp.body) : null;

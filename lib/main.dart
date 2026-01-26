@@ -1,5 +1,6 @@
 import 'package:agri_alert/routes/app_routes.dart';
 import 'package:agri_alert/screens/Recommandation/recommandation_page.dart';
+import 'package:agri_alert/screens/auth/auth_gate.dart';
 import 'package:agri_alert/screens/auth/forgot_password_screen.dart';
 import 'package:agri_alert/screens/auth/new_password_screen.dart';
 import 'package:agri_alert/screens/profil/modifie_champ_page.dart';
@@ -88,7 +89,7 @@ class _MainAppState extends State<MainApp> {
       debugShowCheckedModeBanner: false,
       title: 'Agri Alert',
       theme: ThemeData(textTheme: GoogleFonts.poppinsTextTheme()),
-      initialRoute: AppRoutes.onboarding,
+      initialRoute: AppRoutes.demarrage,
       routes: {
         AppRoutes.onboarding: (context) =>
             OnboardingScreen(finishRoute: AppRoutes.connecter),
@@ -103,6 +104,7 @@ class _MainAppState extends State<MainApp> {
         AppRoutes.modifieProfil: (context) => const EditProfileScreen(),
         AppRoutes.modifieChamp: (context) => const ModifieChampPage(),
         AppRoutes.notifications: (context) => const NotificationScreen(),
+        AppRoutes.demarrage: (context) => const AuthGate(),
       },
     );
   }
