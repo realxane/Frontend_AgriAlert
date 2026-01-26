@@ -13,6 +13,10 @@ class WeatherCardDetail extends StatefulWidget {
 class _WeatherCardDetailState extends State<WeatherCardDetail> {
   int _selectedHourIndex = 0;
 
+  bool get _isToday {
+    return widget.dayData.dayName.trim().toLowerCase().contains("aujourd");
+  }
+
   @override
   void didUpdateWidget(covariant WeatherCardDetail oldWidget) {
     super.didUpdateWidget(oldWidget);
@@ -21,7 +25,8 @@ class _WeatherCardDetailState extends State<WeatherCardDetail> {
       _selectedHourIndex = 0;
     }
     //  Sécurité : si la liste d'heures a diminué
-    if (_selectedHourIndex >= widget.dayData.hours.length) {
+    if (widget.dayData.hours.isNotEmpty &&
+        _selectedHourIndex >= widget.dayData.hours.length) {
       _selectedHourIndex = 0;
     }
   }
@@ -37,14 +42,17 @@ class _WeatherCardDetailState extends State<WeatherCardDetail> {
           borderRadius: BorderRadius.circular(30),
         ),
         child: const Text(
-          "Pas de détails horaires disponibles.",
+          "Pas de détails disponibles pour ce jour.",
           style: TextStyle(color: Colors.white),
         ),
       );
     }
 
+    // ✅ Pour les autres jours que "Aujourd'hui", on force l'affichage sur la 1ère entrée
+    final int safeIndex = _isToday ? _selectedHourIndex : 0;
+
     // On récupère les données de l'heure sélectionnée
-    final currentHour = widget.dayData.hours[_selectedHourIndex];
+    final currentHour = widget.dayData.hours[safeIndex];
 
     return Container(
       padding: const EdgeInsets.all(20),
@@ -74,7 +82,7 @@ class _WeatherCardDetailState extends State<WeatherCardDetail> {
                   vertical: 6,
                 ),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFD4FF5B), 
+                  color: const Color(0xFFD4FF5B),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
@@ -104,41 +112,46 @@ class _WeatherCardDetailState extends State<WeatherCardDetail> {
           _buildTempBar(currentHour.temp.round()),
           const SizedBox(height: 20),
 
-          // Liste horizontale des heures
-          SizedBox(
-            height: 40,
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
-              itemCount: widget.dayData.hours.length,
-              itemBuilder: (context, index) {
-                bool isSelected = _selectedHourIndex == index;
-                return GestureDetector(
-                  onTap: () => setState(() => _selectedHourIndex = index),
-                  child: Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 4),
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    decoration: BoxDecoration(
-                      color: isSelected ? Colors.white24 : Colors.transparent,
-                      borderRadius: BorderRadius.circular(15),
-                    ),
-                    child: Center(
-                      child: Text(
-                        widget.dayData.hours[index].time, // ✅ "07:40"
-                        style: TextStyle(
-                          color: isSelected ? Colors.white : Colors.grey,
-                          fontSize: 12,
-                          fontWeight: isSelected
-                              ? FontWeight.bold
-                              : FontWeight.normal,
+          // ✅ Liste horizontale des heures UNIQUEMENT pour Aujourd'hui
+          if (_isToday) ...[
+            SizedBox(
+              height: 40,
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                itemCount: widget.dayData.hours.length,
+                itemBuilder: (context, index) {
+                  bool isSelected = _selectedHourIndex == index;
+                  return GestureDetector(
+                    onTap: () => setState(() => _selectedHourIndex = index),
+                    child: Container(
+                      margin: const EdgeInsets.symmetric(horizontal: 4),
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      decoration: BoxDecoration(
+                        color: isSelected ? Colors.white24 : Colors.transparent,
+                        borderRadius: BorderRadius.circular(15),
+                      ),
+                      child: Center(
+                        child: Text(
+                          widget.dayData.hours[index].time, // ✅ "07:40"
+                          style: TextStyle(
+                            color: isSelected ? Colors.white : Colors.grey,
+                            fontSize: 12,
+                            fontWeight: isSelected
+                                ? FontWeight.bold
+                                : FontWeight.normal,
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                );
-              },
+                  );
+                },
+              ),
             ),
-          ),
-          const SizedBox(height: 25),
+            const SizedBox(height: 25),
+          ] else ...[
+            // ✅ Pas d'heures pour forecast
+            const SizedBox(height: 10),
+          ],
 
           // Grille des détails (Humidité, UV, Pluie, Vent)
           _buildInfoGrid(currentHour),

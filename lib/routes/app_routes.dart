@@ -29,4 +29,6 @@ class AppRoutes {
   static const String meteo = '/meteo';
   //page notifications
   static const String notifications = '/notifications';
+  //page démarrage
+  static const String demarrage = '/demarrage';
 }

@@ -4,7 +4,7 @@ import 'package:agri_alert/models/model_meteo.dart';
 import 'package:agri_alert/screens/meteo/carte_meteo.dart';
 import 'package:flutter/material.dart';
 
-// ✅ Ajout API backend météo
+//  Ajout API backend météo
 import 'package:agri_alert/services/weather_api.dart';
 
 class WeatherPage extends StatefulWidget {
@@ -33,6 +33,39 @@ class _WeatherPageState extends State<WeatherPage> {
     _loadWeather();
   }
 
+  bool _isToday(WeatherDay d) {
+    return d.dayName.trim().toLowerCase().contains("aujourd");
+  }
+
+  WeatherDay _ensureDailyHasSummaryHour(WeatherDay day) {
+    //  Si c’est un jour forecast et qu’il n’a pas d’heures, on crée un résumé.
+    if (_isToday(day)) return day;
+    if (day.hours.isNotEmpty) return day;
+
+    final double tempResume = day.max ?? day.min ?? 0.0;
+
+    final summaryHour = WeatherHour(
+      time: "Journée", //  pas d’horaires pour les autres jours
+      temp: tempResume,
+      humidity: day.humidity ?? 0,
+      uvIndex: 0, // pas dispo dans forecast (tu peux améliorer si tu ajoutes l’API)
+      rain: day.pop ?? 0, // déjà en % dans ton modèle (pop)
+      wind: day.wind ?? 0.0,
+    );
+
+    return WeatherDay(
+      dayName: day.dayName,
+      status: day.status,
+      hours: [summaryHour],
+      date: day.date,
+      min: day.min,
+      max: day.max,
+      humidity: day.humidity,
+      wind: day.wind,
+      pop: day.pop,
+    );
+  }
+
   Future<void> _loadWeather() async {
     try {
       setState(() {
@@ -50,7 +83,8 @@ class _WeatherPageState extends State<WeatherPage> {
       // construire les hours
       final hours = hourlyList
           .map((e) => WeatherHour.fromHourlyJson(
-              (e as Map).cast<String, dynamic>()))
+                (e as Map).cast<String, dynamic>(),
+              ))
           .toList();
 
       // injecter humidity/wind/uv dans toutes les heures depuis today (car hourly ne les fournit pas)
@@ -62,7 +96,8 @@ class _WeatherPageState extends State<WeatherPage> {
           ? (todayJson['wind'] as num).toDouble()
           : 0.0;
 
-      final uv = (todayJson['uv'] is num) ? (todayJson['uv'] as num).round() : 0;
+      final uv =
+          (todayJson['uv'] is num) ? (todayJson['uv'] as num).round() : 0;
 
       final enrichedHours = hours.map((h) {
         return WeatherHour(
@@ -75,8 +110,11 @@ class _WeatherPageState extends State<WeatherPage> {
         );
       }).toList();
 
-      final todayDay =
-          WeatherDay.fromTodayJson(todayJson, enrichedHours, dayName: "Aujourd'hui");
+      final todayDay = WeatherDay.fromTodayJson(
+        todayJson,
+        enrichedHours,
+        dayName: "Aujourd'hui",
+      );
 
       // 2) forecast 7 jours
       final forecastRes =
@@ -84,13 +122,17 @@ class _WeatherPageState extends State<WeatherPage> {
 
       final daysList = (forecastRes['days'] as List?)?.cast<dynamic>() ?? [];
 
-      final forecastDays = daysList
+      final forecastDaysRaw = daysList
           .map((e) => WeatherDay.fromForecastDayJson(
-              (e as Map).cast<String, dynamic>()))
+                (e as Map).cast<String, dynamic>(),
+              ))
           .toList();
 
+      //  IMPORTANT : on transforme chaque jour forecast en “jour avec 1 heure résumé”
+      final forecastDays = forecastDaysRaw.map(_ensureDailyHasSummaryHour).toList();
+
       setState(() {
-        selectedDay = todayDay;
+        selectedDay = todayDay; // today garde les heures
         _forecastDays = [todayDay, ...forecastDays]; // inclure today en 1er
         _loading = false;
       });
@@ -219,8 +261,7 @@ class _WeatherPageState extends State<WeatherPage> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
       ),
       builder: (context) {
-        // on enlève le premier (aujourd'hui) si tu veux
-        final list = _forecastDays.length > 1 ? _forecastDays.sublist(1) : _forecastDays;
+        final list = _forecastDays; // ✅ on garde Aujourd'hui dedans
 
         return Container(
           padding: const EdgeInsets.all(20),
@@ -249,7 +290,11 @@ class _WeatherPageState extends State<WeatherPage> {
                     final day = list[index];
 
                     final s = day.status.toLowerCase();
-                    final isSunny = s.contains('clear') || s.contains('soleil') || s.contains('sun');
+                    final isSunny = s.contains('clear') ||
+                        s.contains('soleil') ||
+                        s.contains('sun');
+
+                    final isSelected = (selectedDay?.dayName == day.dayName);
 
                     return ListTile(
                       leading: Icon(
@@ -258,18 +303,31 @@ class _WeatherPageState extends State<WeatherPage> {
                       ),
                       title: Text(
                         day.dayName,
-                        style: const TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                      subtitle: Text(day.status),
-                      trailing: Text(
-                        day.max != null ? "${day.max!.round()}°" : "--",
-                        style: const TextStyle(
-                          fontSize: 18,
+                        style: TextStyle(
                           fontWeight: FontWeight.bold,
+                          color: isSelected ? AppColors.vert : Colors.black,
                         ),
                       ),
+                      subtitle: Text(day.status),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (isSelected)
+                            const Icon(Icons.check_circle,
+                                color: AppColors.vert, size: 18),
+                          const SizedBox(width: 8),
+                          Text(
+                            day.max != null ? "${day.max!.round()}°" : "--",
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
                       onTap: () {
-                        // Ici, les days n'ont pas d'heures détaillées -> on ne remplace pas la carte
+                        // ✅ Maintenant : même les jours forecast ont un “résumé” => la carte s’affiche
+                        setState(() => selectedDay = _ensureDailyHasSummaryHour(day));
                         Navigator.pop(context);
                       },
                     );
