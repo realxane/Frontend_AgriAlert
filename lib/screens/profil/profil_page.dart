@@ -1,6 +1,10 @@
+import 'package:agri_alert/routes/app_routes.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../../constants/app_colors.dart';
 import '../../constants/app_images.dart';
+import '../../config/app_config.dart';
+import '../../services/api_client.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -10,10 +14,77 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
+  final ApiClient _apiClient = ApiClient(baseUrl: AppConfig.baseUrl);
+  final _storage = const FlutterSecureStorage();
+
+  Map<String, dynamic>? userData;
+  Map<String, dynamic>? champData;
+  bool _isLoading = true;
+
   bool _notificationsEnabled = true;
   String _selectedTheme = "Claire";
 
-  // Dialogue de déconnexion personnalisé (Annuler / Confirmer)
+  @override
+  void initState() {
+    super.initState();
+    _fetchProfileData();
+  }
+
+  // --- LOGIQUE API ---
+  Future<void> _fetchProfileData() async {
+    try {
+      final token = await _storage.read(key: 'access_token');
+      if (token == null) {
+        if (mounted) {
+          Navigator.pushNamedAndRemoveUntil(
+            context,
+            '/login',
+            (route) => false,
+          );
+        }
+        return;
+      }
+
+      final response = await _apiClient.get(
+        '/api/profile/me',
+        headers: {'Authorization': 'Bearer $token'},
+      );
+
+      if (mounted) {
+        setState(() {
+          userData = response['user'];
+          champData = response['champ'];
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      debugPrint("Erreur profil : $e");
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _handleLogout() async {
+    try {
+      final token = await _storage.read(key: 'access_token');
+      if (token != null) {
+        await _apiClient
+            .post('/api/logout', headers: {'Authorization': 'Bearer $token'})
+            .timeout(const Duration(seconds: 3));
+      }
+    } catch (e) {
+      debugPrint("Erreur logout : $e");
+    } finally {
+      await _storage.delete(key: 'access_token');
+      if (mounted) {
+        Navigator.pushNamedAndRemoveUntil(
+          context,
+          AppRoutes.connecter,
+          (route) => false,
+        );
+      }
+    }
+  }
+
   void _showLogoutDialog() {
     showDialog(
       context: context,
@@ -40,8 +111,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 const SizedBox(width: 15),
                 Expanded(
                   child: _buildDialogButton("Confirmer", () {
-                    // Logique de déconnexion
                     Navigator.pop(context);
+                    _handleLogout();
                   }),
                 ),
               ],
@@ -55,7 +126,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Widget _buildDialogButton(String text, VoidCallback onPressed) {
     return ElevatedButton(
       style: ElevatedButton.styleFrom(
-        backgroundColor: const Color(0xFFE2F9B8), // Vert très clair
+        backgroundColor: const Color(0xFFE2F9B8),
         foregroundColor: Colors.black,
         elevation: 0,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
@@ -68,14 +139,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator(color: Colors.green)),
+      );
+    }
+
     return Scaffold(
       backgroundColor: const Color(0xFFF5F5F5),
       body: SingleChildScrollView(
-        // Correction 1 : On force le scroll pour les petits écrans
         physics: const AlwaysScrollableScrollPhysics(),
         child: Column(
           children: [
-            // --- HEADER VERT AVEC PHOTO ET NOM ---
+            // --- HEADER AVEC DESIGN vert ---
             Stack(
               children: [
                 Container(
@@ -107,22 +183,26 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         children: [
                           CircleAvatar(
                             radius: 45,
-                            backgroundImage: AssetImage(AppImages.agriculteur),
+                            backgroundColor: Colors.grey[300],
+                            backgroundImage: (userData?['photo_url'] != null)
+                                ? NetworkImage(userData!['photo_url'])
+                                : AssetImage(AppImages.agriculteur)
+                                      as ImageProvider,
                           ),
                           const SizedBox(width: 15),
-                          const Column(
+                          Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                "Vieux Maiga",
-                                style: TextStyle(
+                                userData?['nom'] ?? "Utilisateur",
+                                style: const TextStyle(
                                   fontSize: 18,
                                   fontWeight: FontWeight.bold,
                                 ),
                               ),
                               Text(
-                                "Gao, Mali",
-                                style: TextStyle(color: Colors.black54),
+                                champData?['region_name'] ?? "Région inconnue",
+                                style: const TextStyle(color: Colors.black54),
                               ),
                             ],
                           ),
@@ -131,7 +211,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ],
                   ),
                 ),
-                // Bouton Modifier Profil
+                // L'IMAGE DE LA FEUILLE
+                Positioned(
+                  top: 10,
+                  right: 0,
+                  child: Image.asset(
+                    AppImages.feuille,
+                    height: 80,
+                    opacity: const AlwaysStoppedAnimation(0.5),
+                  ),
+                ),
+                // BOUTON MODIFIER
                 Positioned(
                   bottom: 15,
                   right: 20,
@@ -144,20 +234,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ),
                     ),
                     onPressed: () {
-                      Navigator.pushNamed(context, '/modifie_profil_user');
+                      Navigator.pushNamed(
+                        context,
+                        '/modifie_profil_user',
+                      ).then((_) => _fetchProfileData());
                     },
                     icon: const Icon(Icons.edit, size: 18),
                     label: const Text("Modifier Profil"),
-                  ),
-                ),
-                // Image feuille en haut à droite
-                Positioned(
-                  top: 10,
-                  right: 0,
-                  child: Image.asset(
-                    AppImages.feuille,
-                    height: 80,
-                    opacity: const AlwaysStoppedAnimation(0.5),
                   ),
                 ),
               ],
@@ -168,7 +251,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // --- SECTION RÉSUMÉ ---
                   const Text(
                     "Résumé du champ",
                     style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
@@ -190,10 +272,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
                     child: Stack(
                       children: [
-                        const Center(
+                        Center(
                           child: Text(
-                            "4 cultures, Dernier diag: 2jours",
-                            style: TextStyle(
+                            "${champData?['type_culture'] ?? 'Non définie'}\nAire: ${champData?['aire'] ?? '0'} m2",
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
                               color: Colors.white,
                               fontSize: 16,
                               fontWeight: FontWeight.w500,
@@ -208,7 +291,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               Navigator.pushNamed(
                                 context,
                                 '/modifie_champ_page',
-                              );
+                              ).then((_) => _fetchProfileData());
                             },
                             child: const Text(
                               "Modifier champ",
@@ -222,9 +305,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ],
                     ),
                   ),
-
                   const SizedBox(height: 20),
-
                   // --- LISTE DES PARAMÈTRES ---
                   Container(
                     decoration: BoxDecoration(
@@ -233,22 +314,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
                     child: Column(
                       children: [
-                        ListTile(
-                          title: const Text("Unité"),
-                          trailing: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                "m2",
-                                style: TextStyle(color: Colors.grey[600]),
-                              ),
-                              const Icon(
-                                Icons.chevron_right,
-                                color: Colors.blue,
-                              ),
-                            ],
-                          ),
-                        ),
+                        _buildListTile("Unité", trailing: "m2"),
                         const Divider(height: 1),
                         ListTile(
                           title: const Text("Notification"),
@@ -267,15 +333,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             value: _selectedTheme,
                             underline: const SizedBox(),
                             icon: const Icon(Icons.unfold_more, size: 18),
-                            items: ["Claire", "Sombre"].map((String value) {
-                              return DropdownMenuItem<String>(
-                                value: value,
-                                child: Text(
-                                  value,
-                                  style: const TextStyle(color: Colors.grey),
-                                ),
-                              );
-                            }).toList(),
+                            items: ["Claire", "Sombre"]
+                                .map(
+                                  (v) => DropdownMenuItem(
+                                    value: v,
+                                    child: Text(
+                                      v,
+                                      style: const TextStyle(
+                                        color: Colors.grey,
+                                      ),
+                                    ),
+                                  ),
+                                )
+                                .toList(),
                             onChanged: (v) =>
                                 setState(() => _selectedTheme = v!),
                           ),
@@ -292,13 +362,25 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ],
                     ),
                   ),
-
                   const SizedBox(height: 50),
                 ],
               ),
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildListTile(String title, {required String trailing}) {
+    return ListTile(
+      title: Text(title),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(trailing, style: TextStyle(color: Colors.grey[600])),
+          const Icon(Icons.chevron_right, color: Colors.blue),
+        ],
       ),
     );
   }

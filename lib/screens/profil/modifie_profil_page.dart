@@ -1,11 +1,15 @@
-import 'package:agri_alert/constants/app_text_styles.dart';
 import 'package:flutter/material.dart';
 import 'dart:io';
 import 'package:image_picker/image_picker.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../../constants/app_colors.dart';
 import '../../constants/app_images.dart';
+import '../../constants/app_text_styles.dart';
 import '../../widgets/orange_button.dart';
 import '../../widgets/auth_text_field.dart';
+import '../../config/app_config.dart';
+import '../../services/api_client.dart';
+import '../../services/profile_service.dart';
 
 class EditProfileScreen extends StatefulWidget {
   const EditProfileScreen({super.key});
@@ -15,29 +19,130 @@ class EditProfileScreen extends StatefulWidget {
 }
 
 class _EditProfileScreenState extends State<EditProfileScreen> {
-  File? _image;
+  // Contrôleurs pour les champs de texte
+  final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _phoneController = TextEditingController();
+  final TextEditingController _emailController = TextEditingController();
+
+  final ApiClient _apiClient = ApiClient(baseUrl: AppConfig.baseUrl);
+  final ProfileService _profileService =
+      ProfileService(); // Instance du service dédié
+  final _storage = const FlutterSecureStorage();
   final ImagePicker _picker = ImagePicker();
 
-  // Fonction pour changer la photo via la galerie
+  File? _image;
+  String? _currentImageUrl;
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCurrentUserData();
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _phoneController.dispose();
+    _emailController.dispose();
+    super.dispose();
+  }
+
+  // 1. Charger les données actuelles (Lecture simple JSON)
+  Future<void> _loadCurrentUserData() async {
+    try {
+      final token = await _storage.read(key: 'access_token');
+      final response = await _apiClient.get(
+        '/api/profile/me',
+        headers: {'Authorization': 'Bearer $token'},
+      );
+
+      final user = response['user'];
+      setState(() {
+        _nameController.text = user['nom'] ?? "";
+        _phoneController.text = user['telephone'] ?? "";
+        _emailController.text = user['email'] ?? "";
+        _currentImageUrl = user['photo_url'];
+        _isLoading = false;
+      });
+    } catch (e) {
+      debugPrint("Erreur chargement profil: $e");
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  // 2. Sélectionner une image dans la galerie
   Future<void> _pickImage() async {
     final XFile? pickedFile = await _picker.pickImage(
       source: ImageSource.gallery,
     );
     if (pickedFile != null) {
-      setState(() {
-        _image = File(pickedFile.path);
-      });
+      setState(() => _image = File(pickedFile.path));
+    }
+  }
+
+  // 3. Sauvegarder les modifications via ProfileService (Gestion Multipart)
+  Future<void> _updateProfile() async {
+    setState(() => _isLoading = true);
+    try {
+      final token = await _storage.read(key: 'access_token');
+
+      if (token == null) {
+        throw Exception("Session expirée, veuillez vous reconnecter.");
+      }
+
+      // Utilisation du service dédié pour gérer l'image et le texte
+      await _profileService.updateProfile(
+        token: token,
+        nom: _nameController.text,
+        telephone: _phoneController.text,
+        email: _emailController.text,
+        image: _image,
+      );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Profil mis à jour avec succès !"),
+            backgroundColor: Colors.green,
+          ),
+        );
+        Navigator.pop(
+          context,
+          true,
+        ); // Retour avec succès pour rafraîchir l'écran précédent
+      }
+    } catch (e) {
+      debugPrint("Erreur mise à jour: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Erreur : ${e.toString()}"),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator(color: Colors.green)),
+      );
+    }
+
     return Scaffold(
       backgroundColor: Colors.white,
       body: SingleChildScrollView(
         child: Column(
           children: [
-            // --- HEADER VERT (Contient tout le haut) ---
+            // --- HEADER VERT ---
             Stack(
               children: [
                 Container(
@@ -66,15 +171,12 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                             style: TextStyle(
                               fontSize: 20,
                               fontWeight: FontWeight.bold,
-                              color: Colors.black,
                             ),
                           ),
                         ],
                       ),
-
                       const SizedBox(height: 10),
-
-                      // PHOTO DE PROFIL
+                      // PHOTO DE PROFIL DYNAMIQUE
                       CircleAvatar(
                         radius: 50,
                         backgroundColor: Colors.white,
@@ -82,12 +184,13 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                           radius: 47,
                           backgroundImage: _image != null
                               ? FileImage(_image!) as ImageProvider
-                              : AssetImage(AppImages.agriculteur),
+                              : (_currentImageUrl != null
+                                        ? NetworkImage(_currentImageUrl!)
+                                        : AssetImage(AppImages.agriculteur))
+                                    as ImageProvider,
                         ),
                       ),
-
                       const SizedBox(height: 10),
-
                       SizedBox(
                         height: 35,
                         child: ElevatedButton(
@@ -97,7 +200,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                             foregroundColor: Colors.black,
                             elevation: 0,
                             shape: const StadiumBorder(),
-                            padding: const EdgeInsets.symmetric(horizontal: 20),
                           ),
                           child: const Text(
                             "Changer la photo",
@@ -111,8 +213,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                     ],
                   ),
                 ),
-
-                //  IMAGE DE LA FEUILLE en Haut à droite
                 Positioned(
                   top: 0,
                   right: -5,
@@ -127,7 +227,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
             const SizedBox(height: 30),
 
-            // --- FORMULAIRE (CHAMPS DE TEXTE) ---
+            // --- FORMULAIRE ---
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 25),
               child: Column(
@@ -135,29 +235,32 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                 children: [
                   const Text("   Nom", style: AppTextStyles.textnoir),
                   const SizedBox(height: 8),
-                  const AuthTextField(hintText: "Vieux Maiga"),
+                  AuthTextField(
+                    controller: _nameController,
+                    hintText: "Votre nom",
+                  ),
 
                   const SizedBox(height: 20),
 
-                  const Text("   mot de passe", style: AppTextStyles.textnoir),
+                  const Text("   Téléphone", style: AppTextStyles.textnoir),
                   const SizedBox(height: 8),
-                  const AuthTextField(hintText: "********", obscureText: true),
+                  AuthTextField(
+                    controller: _phoneController,
+                    hintText: "+223 xxxxxxx",
+                  ),
 
                   const SizedBox(height: 20),
 
                   const Text("   Email", style: AppTextStyles.textnoir),
                   const SizedBox(height: 8),
-                  const AuthTextField(hintText: "vieuxmaiga@gmail.com"),
+                  AuthTextField(
+                    controller: _emailController,
+                    hintText: "vieuxmaiga@gmail.com",
+                  ),
 
                   const SizedBox(height: 40),
 
-                  //utiliser le wiget boutton orange
-                  OrangeButton(
-                    label: "Sauvegarder",
-                    onPressed: () {
-                      Navigator.pop(context);
-                    },
-                  ),
+                  OrangeButton(label: "Sauvegarder", onPressed: _updateProfile),
                   const SizedBox(height: 20),
                 ],
               ),
