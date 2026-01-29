@@ -10,7 +10,6 @@ import '../../constants/app_images.dart';
 import 'package:agri_alert/routes/app_routes.dart';
 import '../Recommandation/recommandation_page.dart';
 
-// ✅ Ajouts pour récupérer champId backend
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:agri_alert/config/app_config.dart';
 import 'package:agri_alert/services/api_client.dart';
@@ -25,91 +24,49 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int _currentIndex = 0;
 
-  // ✅ API + storage
   final _api = ApiClient(baseUrl: AppConfig.baseUrl);
   static const _storage = FlutterSecureStorage();
 
-  String? _champId;
-  bool _champLoading = true;
-  String? _champError;
+  // Infos Utilisateur
+  String _userName = "Utilisateur";
+  String? _userPhotoUrl;
+  bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
-    _loadChampId();
+    _loadUserData();
   }
 
-  Future<void> _loadChampId() async {
+  Future<void> _loadUserData() async {
     try {
       final token = await _storage.read(key: 'access_token');
-      if (token == null || token.isEmpty) {
-        throw Exception("Token manquant. Connecte-toi d'abord.");
-      }
+      if (token == null) return;
 
-      // ✅ GET /api/champs
       final res = await _api.get(
-        '/api/champs',
+        '/api/profile/me',
         headers: {'Authorization': 'Bearer $token'},
       );
 
-      // res peut être {data:[...]} ou {champs:[...]} ou directement [...]
-      final raw = (res['data'] ?? res['champs'] ?? res);
-
-      if (raw is! List) {
-        throw Exception("Format inattendu /api/champs : $res");
+      if (mounted) {
+        setState(() {
+          // On récupère les infos dans l'objet 'user' renvoyé par le backend
+          _userName = res['user']?['nom'] ?? "Utilisateur";
+          _userPhotoUrl = res['user']?['photo_url'];
+          _isLoading = false;
+        });
       }
-      if (raw.isEmpty) {
-        throw Exception("Aucun champ trouvé pour cet utilisateur.");
-      }
-
-      final firstChampId = raw[0]['id'].toString();
-
-      // Optionnel: sauvegarder
-      await _storage.write(key: 'champ_id', value: firstChampId);
-
-      setState(() {
-        _champId = firstChampId;
-        _champLoading = false;
-        _champError = null;
-      });
     } catch (e) {
-      setState(() {
-        _champError = e.toString();
-        _champLoading = false;
-      });
+      debugPrint("Erreur chargement profil : $e");
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
   List<Widget> get _pages {
-    final weatherPage = _champLoading
-        ? const Center(child: CircularProgressIndicator())
-        : (_champId == null)
-            ? Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        "Impossible de charger le champ.\n$_champError",
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(color: Colors.red),
-                      ),
-                      const SizedBox(height: 12),
-                      ElevatedButton(
-                        onPressed: _loadChampId,
-                        child: const Text("Réessayer"),
-                      ),
-                    ],
-                  ),
-                ),
-              )
-            : WeatherPage(champId: _champId!);
-
     return [
-      const _HomeContent(),
+      _HomeContent(userName: _userName, userPhotoUrl: _userPhotoUrl),
       const RecommandationsScreen(),
-      weatherPage,
+      const WeatherPage(champId: "1"), // Garde l'ID par défaut pour la météo
       const ProfileScreen(),
     ];
   }
@@ -123,9 +80,9 @@ class _HomeScreenState extends State<HomeScreen> {
       backgroundColor: AppColors.gris2,
       extendBody: true,
       resizeToAvoidBottomInset: false,
-
-      body: _pages[_currentIndex],
-
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : _pages[_currentIndex],
       floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
       floatingActionButton: SizedBox(
         width: fabSize,
@@ -147,18 +104,23 @@ class _HomeScreenState extends State<HomeScreen> {
       bottomNavigationBar: _BottomBar(
         height: bottomBarBaseHeight,
         currentIndex: _currentIndex,
-        onTap: (i) => setState(() => _currentIndex = i),
+        onTap: (i) {
+          setState(() => _currentIndex = i);
+          if (i == 0) _loadUserData(); // Rafraîchir si on revient à l'accueil
+        },
       ),
     );
   }
 }
 
 /* -------------------------------------------------------------------------- */
-/* CONTENU DE L'ACCUEIL                             */
+/* CONTENU DE L'ACCUEIL                                            */
 /* -------------------------------------------------------------------------- */
 
 class _HomeContent extends StatefulWidget {
-  const _HomeContent();
+  final String userName;
+  final String? userPhotoUrl;
+  const _HomeContent({required this.userName, this.userPhotoUrl});
 
   @override
   State<_HomeContent> createState() => _HomeContentState();
@@ -215,13 +177,16 @@ class _HomeContentState extends State<_HomeContent> {
       child: Column(
         children: [
           _Header(
-            userName: 'Alassane',
+            userName: widget.userName,
+            userPhotoUrl: widget.userPhotoUrl,
             subtitle: 'Commence tes activités agricoles',
             temperature: '29°',
             condition: 'Cloudy',
             sidePadding: 16,
             height: media.size.height * 0.2,
-            onNotificationTap: () {Navigator.pushNamed(context, AppRoutes.notifications);},
+            onNotificationTap: () {
+              Navigator.pushNamed(context, AppRoutes.notifications);
+            },
             showNotificationDot: true,
           ),
           Expanded(
@@ -245,6 +210,7 @@ class _HomeContentState extends State<_HomeContent> {
                       children: [
                         for (int i = 0; i < alertsToShow.length; i++) ...[
                           _ListRow(
+                            // Ici on garde l'image de l'alerte ou celle par défaut
                             leadingImage: AppImages.alassane,
                             title: alertsToShow[i].title,
                             subtitle: alertsToShow[i].date,
@@ -297,12 +263,14 @@ class _HomeContentState extends State<_HomeContent> {
 
 class _Header extends StatelessWidget {
   final String userName, subtitle, temperature, condition;
+  final String? userPhotoUrl;
   final double height, sidePadding;
   final VoidCallback onNotificationTap;
   final bool showNotificationDot;
 
   const _Header({
     required this.userName,
+    this.userPhotoUrl,
     required this.subtitle,
     required this.temperature,
     required this.condition,
@@ -315,7 +283,6 @@ class _Header extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final double topPaddingFromSystem = MediaQuery.of(context).padding.top;
-
     final double totalHeight = height + topPaddingFromSystem;
 
     return SizedBox(
@@ -338,7 +305,6 @@ class _Header extends StatelessWidget {
               ),
             ),
           ),
-
           Positioned(
             top: -20,
             right: -10,
@@ -351,7 +317,6 @@ class _Header extends StatelessWidget {
               ),
             ),
           ),
-
           Padding(
             padding: EdgeInsets.fromLTRB(
               sidePadding,
@@ -364,7 +329,12 @@ class _Header extends StatelessWidget {
               children: [
                 Row(
                   children: [
-                    _Avatar(image: AppImages.alassane, size: 44),
+                    // ✅ Modification ici pour la photo dynamique
+                    _Avatar(
+                      imagePath: AppImages.alassane, // Fallback
+                      networkUrl: userPhotoUrl,
+                      size: 44,
+                    ),
                     const SizedBox(width: 10),
                     Expanded(
                       child: Column(
@@ -506,7 +476,9 @@ class _SectionHeader extends StatelessWidget {
         Text(
           title,
           style: AppTextStyles.textnoir.copyWith(
-              fontWeight: FontWeight.w700, fontSize: 18),
+            fontWeight: FontWeight.w700,
+            fontSize: 18,
+          ),
         ),
         const Spacer(),
         if (action != null)
@@ -561,7 +533,7 @@ class _ListRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        _Avatar(image: leadingImage, size: 40),
+        _Avatar(imagePath: leadingImage, size: 40),
         const SizedBox(width: 10),
         Expanded(
           child: Column(
@@ -570,10 +542,14 @@ class _ListRow extends StatelessWidget {
               Text(
                 title,
                 style: AppTextStyles.textnoir.copyWith(
-                    fontWeight: FontWeight.w700, fontSize: 16),
+                  fontWeight: FontWeight.w700,
+                  fontSize: 16,
+                ),
               ),
-              Text(subtitle,
-                  style: AppTextStyles.textgris2.copyWith(fontSize: 16)),
+              Text(
+                subtitle,
+                style: AppTextStyles.textgris2.copyWith(fontSize: 16),
+              ),
             ],
           ),
         ),
@@ -583,9 +559,12 @@ class _ListRow extends StatelessWidget {
 }
 
 class _Avatar extends StatelessWidget {
-  final String image;
+  final String imagePath;
+  final String? networkUrl;
   final double size;
-  const _Avatar({required this.image, required this.size});
+
+  const _Avatar({required this.imagePath, this.networkUrl, required this.size});
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -593,7 +572,12 @@ class _Avatar extends StatelessWidget {
       height: size,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        image: DecorationImage(image: AssetImage(image), fit: BoxFit.cover),
+        image: DecorationImage(
+          image: (networkUrl != null && networkUrl!.isNotEmpty)
+              ? NetworkImage(networkUrl!) as ImageProvider
+              : AssetImage(imagePath),
+          fit: BoxFit.cover,
+        ),
       ),
     );
   }
