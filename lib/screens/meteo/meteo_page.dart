@@ -261,7 +261,7 @@ class _WeatherPageState extends State<WeatherPage> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
       ),
       builder: (context) {
-        final list = _forecastDays; // ✅ on garde Aujourd'hui dedans
+        final list = _forecastDays; //  on garde Aujourd'hui dedans
 
         return Container(
           padding: const EdgeInsets.all(20),

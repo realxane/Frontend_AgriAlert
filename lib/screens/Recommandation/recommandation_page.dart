@@ -102,8 +102,8 @@ class _RecommandationsScreenState extends State<RecommandationsScreen> {
     if (n.contains('papaye')) return "assets/images/papaye.webp";
     if (n.contains('orange')) return "assets/images/orange.png";
     if (n.contains('mangue')) return "assets/images/mangue.jpeg";
-    if (n.contains('citron')) return "assets/images/citron.png";
-    if (n.contains('poivre') || n.contains('piment')) return "assets/images/piment.jpg";
+    if (n.contains('citron')) return "assets/images/citron.jpg";
+    if (n.contains('poivre') || n.contains('piment')) return "assets/images/poivre.jpg"; 
     return "assets/images/tomate.jpg";
   }
 
