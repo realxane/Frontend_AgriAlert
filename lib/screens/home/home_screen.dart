@@ -1,19 +1,31 @@
+import 'dart:io';
+import 'package:path_provider/path_provider.dart';
+import 'package:http/http.dart' as http;
+
 import 'package:agri_alert/screens/meteo/meteo_page.dart';
 import 'package:agri_alert/screens/profil/profil_page.dart';
 import 'package:flutter/material.dart';
 import 'package:iconify_flutter/iconify_flutter.dart';
 import 'package:iconify_flutter/icons/ph.dart';
 import 'package:iconsax/iconsax.dart';
+
 import '../../constants/app_colors.dart';
 import '../../constants/app_text_styles.dart';
 import '../../constants/app_images.dart';
 import 'package:agri_alert/routes/app_routes.dart';
 import '../Recommandation/recommandation_page.dart';
 
-// ✅ Ajouts pour récupérer champId backend
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:agri_alert/config/app_config.dart';
 import 'package:agri_alert/services/api_client.dart';
+
+import 'package:agri_alert/services/weather_api.dart';
+
+import 'package:agri_alert/services/diagnostic_api.dart';
+import 'package:agri_alert/models/diagnostic_model.dart';
+
+// page diagnostic IA
+import 'package:agri_alert/screens/IA/diagnostic_page.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -25,91 +37,209 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int _currentIndex = 0;
 
-  // ✅ API + storage
   final _api = ApiClient(baseUrl: AppConfig.baseUrl);
   static const _storage = FlutterSecureStorage();
 
+  final WeatherApi _weatherApi = WeatherApi();
+  final DiagnosticApi _diagApi = DiagnosticApi();
+
+  // Infos Utilisateur
+  String _userName = "Utilisateur";
+  String? _userPhotoUrl;
+
+  // ChampId (important pour météo)
   String? _champId;
-  bool _champLoading = true;
-  String? _champError;
+
+  //  Météo (header)
+  String _temp = '--°';
+  String _condition = '--';
+
+  //  Diagnostics (liste)
+  List<DiagnosticResult> _diagnostics = [];
+
+  bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
-    _loadChampId();
+    _loadHomeData();
   }
 
-  Future<void> _loadChampId() async {
+  Future<void> _loadHomeData() async {
     try {
+      setState(() => _isLoading = true);
+
       final token = await _storage.read(key: 'access_token');
       if (token == null || token.isEmpty) {
-        throw Exception("Token manquant. Connecte-toi d'abord.");
+        setState(() => _isLoading = false);
+        return;
       }
 
-      // ✅ GET /api/champs
-      final res = await _api.get(
-        '/api/champs',
+      // 1) Profil
+      final profileRes = await _api.get(
+        '/api/profile/me',
         headers: {'Authorization': 'Bearer $token'},
       );
 
-      // res peut être {data:[...]} ou {champs:[...]} ou directement [...]
-      final raw = (res['data'] ?? res['champs'] ?? res);
+      final userJson =
+          (profileRes['user'] as Map?)?.cast<String, dynamic>() ?? {};
+      final userName = (userJson['nom'] ?? "Utilisateur").toString();
+      final photoUrl = userJson['photo_url']?.toString();
 
-      if (raw is! List) {
-        throw Exception("Format inattendu /api/champs : $res");
+      // 2) ChampId de l'utilisateur (on prend le 1er champ)
+      final champsRes = await _api.get(
+        '/api/champs',
+        headers: {'Authorization': 'Bearer $token'},
+      );
+      final champsList = (champsRes['champs'] as List?)?.cast<dynamic>() ?? [];
+      final champId = champsList.isNotEmpty
+          ? (champsList[0]['id'] ?? '').toString()
+          : null;
+
+      // 3) Météo today pour ce champ
+      String temp = '--°';
+      String condition = '--';
+
+      if (champId != null && champId.isNotEmpty) {
+        try {
+          final todayRes = await _weatherApi.today(champId: champId);
+          final today =
+              (todayRes['today'] as Map?)?.cast<String, dynamic>() ?? {};
+
+          final t =
+              (today['temp'] is num) ? (today['temp'] as num).round() : null;
+          final desc = today['desc']?.toString();
+
+          if (t != null) temp = '$t°';
+          if (desc != null && desc.isNotEmpty) {
+            condition = _normalizeWeather(desc);
+          }
+        } catch (_) {
+          // si météo échoue, on garde "--"
+        }
       }
-      if (raw.isEmpty) {
-        throw Exception("Aucun champ trouvé pour cet utilisateur.");
+
+      // 4) Historique diagnostics (preview)
+      List<DiagnosticResult> diags = [];
+      try {
+        final diagRes = await _diagApi.getHistory(limit: 6);
+        final list = (diagRes['diagnostics'] as List?)?.cast<dynamic>() ?? [];
+        diags = list
+            .map((e) =>
+                DiagnosticResult.fromJson((e as Map).cast<String, dynamic>()))
+            .toList();
+      } catch (_) {
+        // si diagnostics échoue, on garde liste vide
       }
 
-      final firstChampId = raw[0]['id'].toString();
-
-      // Optionnel: sauvegarder
-      await _storage.write(key: 'champ_id', value: firstChampId);
+      if (!mounted) return;
 
       setState(() {
-        _champId = firstChampId;
-        _champLoading = false;
-        _champError = null;
+        _userName = userName;
+        _userPhotoUrl = photoUrl;
+        _champId = champId;
+
+        _temp = temp;
+        _condition = condition;
+
+        _diagnostics = diags;
+
+        _isLoading = false;
       });
     } catch (e) {
-      setState(() {
-        _champError = e.toString();
-        _champLoading = false;
-      });
+      debugPrint("Erreur chargement home : $e");
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+    }
+  }
+
+  String _normalizeWeather(String desc) {
+    final d = desc.toLowerCase();
+    if (d.contains('cloud')) return 'Cloudy';
+    if (d.contains('clear') || d.contains('soleil') || d.contains('sun')) {
+      return 'Sunny';
+    }
+    if (d.contains('rain') || d.contains('pluie')) return 'Rainy';
+    if (d.contains('storm') || d.contains('orage')) return 'Storm';
+    return desc;
+  }
+
+  //  Télécharge l'image_url en fichier local pour DiagnosticPage (qui attend un path local)
+  Future<String> _downloadToLocalFile(String url) async {
+    final uri = Uri.parse(url);
+    final res = await http.get(uri);
+    if (res.statusCode != 200) {
+      throw Exception("Téléchargement image échoué (${res.statusCode}).");
+    }
+
+    final dir = await getTemporaryDirectory();
+    final file = File(
+      '${dir.path}/diag_${DateTime.now().millisecondsSinceEpoch}.jpg',
+    );
+    await file.writeAsBytes(res.bodyBytes);
+    return file.path;
+  }
+
+  //  Ouvrir DiagnosticPage quand on clique sur un historique
+  Future<void> _openDiagnostic(DiagnosticResult diag) async {
+    try {
+      // Ton modèle a imageUrl = json['image_url']
+      final img = diag.imageUrl;
+
+      if (img.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Aucune image disponible pour ce diagnostic.")),
+        );
+        return;
+      }
+
+      String localPath;
+
+      // Si c'est déjà un fichier local
+      if (img.startsWith('/') || img.startsWith('file://')) {
+        localPath = img.replaceFirst('file://', '');
+      } else if (img.startsWith('http://') || img.startsWith('https://')) {
+        //  convertir URL -> fichier local
+        localPath = await _downloadToLocalFile(img);
+      } else {
+        // cas relatif : ex "storage/diagnostics/xxx.jpg"
+        final fullUrl = '${AppConfig.baseUrl}/$img'.replaceAll('//', '/').replaceFirst(':/', '://');
+        localPath = await _downloadToLocalFile(fullUrl);
+      }
+
+      if (!mounted) return;
+
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => DiagnosticPage(imagePath: localPath),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Impossible d'ouvrir ce diagnostic: $e")),
+      );
     }
   }
 
   List<Widget> get _pages {
-    final weatherPage = _champLoading
-        ? const Center(child: CircularProgressIndicator())
-        : (_champId == null)
-            ? Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        "Impossible de charger le champ.\n$_champError",
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(color: Colors.red),
-                      ),
-                      const SizedBox(height: 12),
-                      ElevatedButton(
-                        onPressed: _loadChampId,
-                        child: const Text("Réessayer"),
-                      ),
-                    ],
-                  ),
-                ),
-              )
-            : WeatherPage(champId: _champId!);
-
     return [
-      const _HomeContent(),
+      _HomeContent(
+        userName: _userName,
+        userPhotoUrl: _userPhotoUrl,
+        temperature: _temp,
+        condition: _condition,
+        diagnostics: _diagnostics,
+        onDiagnosticTap: _openDiagnostic, // ✅ callback ici
+      ),
       const RecommandationsScreen(),
-      weatherPage,
+
+      //  Important : on passe le vrai champId
+      (_champId != null && _champId!.isNotEmpty)
+          ? WeatherPage(champId: _champId!)
+          : const Center(child: Text("Aucun champ disponible pour la météo.")),
+
       const ProfileScreen(),
     ];
   }
@@ -124,7 +254,9 @@ class _HomeScreenState extends State<HomeScreen> {
       extendBody: true,
       resizeToAvoidBottomInset: false,
 
-      body: _pages[_currentIndex],
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : _pages[_currentIndex],
 
       floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
       floatingActionButton: SizedBox(
@@ -144,21 +276,45 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
       ),
+
       bottomNavigationBar: _BottomBar(
         height: bottomBarBaseHeight,
         currentIndex: _currentIndex,
-        onTap: (i) => setState(() => _currentIndex = i),
+        onTap: (i) {
+          setState(() => _currentIndex = i);
+          if (i == 0) _loadHomeData(); // Rafraîchir si on revient à l'accueil
+        },
       ),
     );
   }
 }
 
 /* -------------------------------------------------------------------------- */
-/* CONTENU DE L'ACCUEIL                             */
+/* CONTENU DE L'ACCUEIL                                            */
 /* -------------------------------------------------------------------------- */
 
 class _HomeContent extends StatefulWidget {
-  const _HomeContent();
+  final String userName;
+  final String? userPhotoUrl;
+
+  // ✅ météo dynamique
+  final String temperature;
+  final String condition;
+
+  // ✅ diagnostics dynamiques
+  final List<DiagnosticResult> diagnostics;
+
+  // ✅ callback au clic
+  final Future<void> Function(DiagnosticResult diag) onDiagnosticTap;
+
+  const _HomeContent({
+    required this.userName,
+    this.userPhotoUrl,
+    required this.temperature,
+    required this.condition,
+    required this.diagnostics,
+    required this.onDiagnosticTap,
+  });
 
   @override
   State<_HomeContent> createState() => _HomeContentState();
@@ -172,21 +328,10 @@ class _HomeContentState extends State<_HomeContent> {
   bool _showAllDiagnostics = false;
 
   final List<_AlertItem> _alerts = const [
-    _AlertItem(title: 'Forte sécheresse', date: 'Jeudi 17/12/2025'),
-    _AlertItem(title: 'Forte sécheresse', date: 'Jeudi 17/12/2025'),
-    _AlertItem(title: 'Inondation', date: 'Vendredi 18/12/2025'),
-    _AlertItem(title: 'Vent fort', date: 'Samedi 19/12/2025'),
-  ];
-
-  final List<_DiagItem> _diagnostics = const [
-    _DiagItem(label: 'Maïs', date: 'Jeudi 17/12/2025'),
-    _DiagItem(label: 'Maïs', date: 'Jeudi 17/12/2025'),
-    _DiagItem(label: 'Maïs', date: 'Jeudi 17/12/2025'),
-    _DiagItem(label: 'Maïs', date: 'Jeudi 17/12/2025'),
-    _DiagItem(label: 'Maïs', date: 'Jeudi 17/12/2025'),
-    _DiagItem(label: 'Maïs', date: 'Jeudi 17/12/2025'),
-    _DiagItem(label: 'Riz', date: 'Dimanche 20/12/2025'),
-    _DiagItem(label: 'Tomate', date: 'Lundi 21/12/2025'),
+    _AlertItem(title: 'Forte sécheresse', date: '17/12/2025'),
+    _AlertItem(title: 'Forte sécheresse', date: '17/12/2025'),
+    _AlertItem(title: 'Inondation', date: '18/12/2025'),
+    _AlertItem(title: 'Vent fort', date: '19/12/2025'),
   ];
 
   @override
@@ -199,15 +344,14 @@ class _HomeContentState extends State<_HomeContent> {
     final scrollBottomPadding = bottomBarTotalHeight + (fabSize / 2) + 18;
 
     final hasMoreAlerts = _alerts.length > _maxAlertsPreview;
-    final hasMoreDiagnostics = _diagnostics.length > _maxDiagnosticsPreview;
+    final alertsToShow =
+        (_showAllAlerts || !hasMoreAlerts) ? _alerts : _alerts.take(_maxAlertsPreview).toList();
 
-    final alertsToShow = (_showAllAlerts || !hasMoreAlerts)
-        ? _alerts
-        : _alerts.take(_maxAlertsPreview).toList();
-
+    final diags = widget.diagnostics;
+    final hasMoreDiagnostics = diags.length > _maxDiagnosticsPreview;
     final diagnosticsToShow = (_showAllDiagnostics || !hasMoreDiagnostics)
-        ? _diagnostics
-        : _diagnostics.take(_maxDiagnosticsPreview).toList();
+        ? diags
+        : diags.take(_maxDiagnosticsPreview).toList();
 
     return SafeArea(
       top: false,
@@ -215,13 +359,16 @@ class _HomeContentState extends State<_HomeContent> {
       child: Column(
         children: [
           _Header(
-            userName: 'Alassane',
+            userName: widget.userName,
+            userPhotoUrl: widget.userPhotoUrl,
             subtitle: 'Commence tes activités agricoles',
-            temperature: '29°',
-            condition: 'Cloudy',
+            temperature: widget.temperature,
+            condition: widget.condition,
             sidePadding: 16,
             height: media.size.height * 0.2,
-            onNotificationTap: () {Navigator.pushNamed(context, AppRoutes.notifications);},
+            onNotificationTap: () {
+              Navigator.pushNamed(context, AppRoutes.notifications);
+            },
             showNotificationDot: true,
           ),
           Expanded(
@@ -232,12 +379,8 @@ class _HomeContentState extends State<_HomeContent> {
                 children: [
                   _SectionHeader(
                     title: 'Alertes',
-                    action: hasMoreAlerts
-                        ? (_showAllAlerts ? 'Voir moins' : 'Voir tout')
-                        : null,
-                    onTap: hasMoreAlerts
-                        ? () => setState(() => _showAllAlerts = !_showAllAlerts)
-                        : null,
+                    action: hasMoreAlerts ? (_showAllAlerts ? 'Voir moins' : 'Voir tout') : null,
+                    onTap: hasMoreAlerts ? () => setState(() => _showAllAlerts = !_showAllAlerts) : null,
                   ),
                   const SizedBox(height: 10),
                   _CardContainer(
@@ -249,39 +392,42 @@ class _HomeContentState extends State<_HomeContent> {
                             title: alertsToShow[i].title,
                             subtitle: alertsToShow[i].date,
                           ),
-                          if (i != alertsToShow.length - 1)
-                            const SizedBox(height: 10),
+                          if (i != alertsToShow.length - 1) const SizedBox(height: 10),
                         ],
                       ],
                     ),
                   ),
                   const SizedBox(height: 18),
+
                   _SectionHeader(
                     title: 'Historique de diagnostics',
-                    action: hasMoreDiagnostics
-                        ? (_showAllDiagnostics ? 'Voir moins' : 'Voir tout')
-                        : null,
-                    onTap: hasMoreDiagnostics
-                        ? () => setState(
-                            () => _showAllDiagnostics = !_showAllDiagnostics,
-                          )
-                        : null,
+                    action: (hasMoreDiagnostics) ? (_showAllDiagnostics ? 'Voir moins' : 'Voir tout') : null,
+                    onTap: (hasMoreDiagnostics) ? () => setState(() => _showAllDiagnostics = !_showAllDiagnostics) : null,
                   ),
                   const SizedBox(height: 10),
+
                   _CardContainer(
-                    child: Column(
-                      children: [
-                        for (int i = 0; i < diagnosticsToShow.length; i++) ...[
-                          _ListRow(
-                            leadingImage: AppImages.alassane,
-                            title: diagnosticsToShow[i].label,
-                            subtitle: diagnosticsToShow[i].date,
+                    child: (diagnosticsToShow.isEmpty)
+                        ? const Padding(
+                            padding: EdgeInsets.all(8),
+                            child: Text("Aucun diagnostic pour le moment."),
+                          )
+                        : Column(
+                            children: [
+                              for (int i = 0; i < diagnosticsToShow.length; i++) ...[
+                                InkWell(
+                                  // ✅ clic sur l’item -> ouvre DiagnosticPage
+                                  onTap: () => widget.onDiagnosticTap(diagnosticsToShow[i]),
+                                  child: _ListRow(
+                                    leadingImage: AppImages.alassane,
+                                    title: diagnosticsToShow[i].maladie,
+                                    subtitle: diagnosticsToShow[i].createdAtShort,
+                                  ),
+                                ),
+                                if (i != diagnosticsToShow.length - 1) const SizedBox(height: 12),
+                              ],
+                            ],
                           ),
-                          if (i != diagnosticsToShow.length - 1)
-                            const SizedBox(height: 12),
-                        ],
-                      ],
-                    ),
                   ),
                 ],
               ),
@@ -297,12 +443,14 @@ class _HomeContentState extends State<_HomeContent> {
 
 class _Header extends StatelessWidget {
   final String userName, subtitle, temperature, condition;
+  final String? userPhotoUrl;
   final double height, sidePadding;
   final VoidCallback onNotificationTap;
   final bool showNotificationDot;
 
   const _Header({
     required this.userName,
+    this.userPhotoUrl,
     required this.subtitle,
     required this.temperature,
     required this.condition,
@@ -315,7 +463,6 @@ class _Header extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final double topPaddingFromSystem = MediaQuery.of(context).padding.top;
-
     final double totalHeight = height + topPaddingFromSystem;
 
     return SizedBox(
@@ -338,7 +485,6 @@ class _Header extends StatelessWidget {
               ),
             ),
           ),
-
           Positioned(
             top: -20,
             right: -10,
@@ -351,7 +497,6 @@ class _Header extends StatelessWidget {
               ),
             ),
           ),
-
           Padding(
             padding: EdgeInsets.fromLTRB(
               sidePadding,
@@ -364,7 +509,11 @@ class _Header extends StatelessWidget {
               children: [
                 Row(
                   children: [
-                    _Avatar(image: AppImages.alassane, size: 44),
+                    _Avatar(
+                      imagePath: AppImages.alassane,
+                      networkUrl: userPhotoUrl,
+                      size: 44,
+                    ),
                     const SizedBox(width: 10),
                     Expanded(
                       child: Column(
@@ -372,16 +521,12 @@ class _Header extends StatelessWidget {
                         children: [
                           Text(
                             'Bonjour $userName !',
-                            style: AppTextStyles.titre1.copyWith(
-                              color: Colors.black87,
-                            ),
+                            style: AppTextStyles.titre1.copyWith(color: Colors.black87),
                             overflow: TextOverflow.ellipsis,
                           ),
                           Text(
                             subtitle,
-                            style: AppTextStyles.textgris.copyWith(
-                              color: Colors.black54,
-                            ),
+                            style: AppTextStyles.textgris.copyWith(color: Colors.black54),
                             overflow: TextOverflow.ellipsis,
                           ),
                         ],
@@ -506,7 +651,9 @@ class _SectionHeader extends StatelessWidget {
         Text(
           title,
           style: AppTextStyles.textnoir.copyWith(
-              fontWeight: FontWeight.w700, fontSize: 18),
+            fontWeight: FontWeight.w700,
+            fontSize: 18,
+          ),
         ),
         const Spacer(),
         if (action != null)
@@ -561,7 +708,7 @@ class _ListRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        _Avatar(image: leadingImage, size: 40),
+        _Avatar(imagePath: leadingImage, size: 40),
         const SizedBox(width: 10),
         Expanded(
           child: Column(
@@ -570,10 +717,14 @@ class _ListRow extends StatelessWidget {
               Text(
                 title,
                 style: AppTextStyles.textnoir.copyWith(
-                    fontWeight: FontWeight.w700, fontSize: 16),
+                  fontWeight: FontWeight.w700,
+                  fontSize: 16,
+                ),
               ),
-              Text(subtitle,
-                  style: AppTextStyles.textgris2.copyWith(fontSize: 16)),
+              Text(
+                subtitle,
+                style: AppTextStyles.textgris2.copyWith(fontSize: 16),
+              ),
             ],
           ),
         ),
@@ -583,9 +734,12 @@ class _ListRow extends StatelessWidget {
 }
 
 class _Avatar extends StatelessWidget {
-  final String image;
+  final String imagePath;
+  final String? networkUrl;
   final double size;
-  const _Avatar({required this.image, required this.size});
+
+  const _Avatar({required this.imagePath, this.networkUrl, required this.size});
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -593,7 +747,12 @@ class _Avatar extends StatelessWidget {
       height: size,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        image: DecorationImage(image: AssetImage(image), fit: BoxFit.cover),
+        image: DecorationImage(
+          image: (networkUrl != null && networkUrl!.isNotEmpty)
+              ? NetworkImage(networkUrl!) as ImageProvider
+              : AssetImage(imagePath),
+          fit: BoxFit.cover,
+        ),
       ),
     );
   }
@@ -708,9 +867,4 @@ class _NavItem extends StatelessWidget {
 class _AlertItem {
   final String title, date;
   const _AlertItem({required this.title, required this.date});
-}
-
-class _DiagItem {
-  final String label, date;
-  const _DiagItem({required this.label, required this.date});
 }
