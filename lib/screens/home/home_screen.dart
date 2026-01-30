@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:agri_alert/screens/home/home_alerts_section.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:http/http.dart' as http;
 
@@ -20,11 +21,10 @@ import 'package:agri_alert/config/app_config.dart';
 import 'package:agri_alert/services/api_client.dart';
 
 import 'package:agri_alert/services/weather_api.dart';
-
 import 'package:agri_alert/services/diagnostic_api.dart';
 import 'package:agri_alert/models/diagnostic_model.dart';
+import 'package:agri_alert/models/notification_model.dart';
 
-// page diagnostic IA
 import 'package:agri_alert/screens/IA/diagnostic_page.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -43,20 +43,14 @@ class _HomeScreenState extends State<HomeScreen> {
   final WeatherApi _weatherApi = WeatherApi();
   final DiagnosticApi _diagApi = DiagnosticApi();
 
-  // Infos Utilisateur
   String _userName = "Utilisateur";
   String? _userPhotoUrl;
-
-  // ChampId (important pour météo)
   String? _champId;
-
-  //  Météo (header)
   String _temp = '--°';
   String _condition = '--';
 
-  //  Diagnostics (liste)
   List<DiagnosticResult> _diagnostics = [];
-
+  List<NotificationModel> _notifications = []; // Liste pour les alertes
   bool _isLoading = true;
 
   @override
@@ -80,13 +74,12 @@ class _HomeScreenState extends State<HomeScreen> {
         '/api/profile/me',
         headers: {'Authorization': 'Bearer $token'},
       );
-
       final userJson =
           (profileRes['user'] as Map?)?.cast<String, dynamic>() ?? {};
       final userName = (userJson['nom'] ?? "Utilisateur").toString();
       final photoUrl = userJson['photo_url']?.toString();
 
-      // 2) ChampId de l'utilisateur (on prend le 1er champ)
+      // 2) Champs
       final champsRes = await _api.get(
         '/api/champs',
         headers: {'Authorization': 'Bearer $token'},
@@ -96,41 +89,54 @@ class _HomeScreenState extends State<HomeScreen> {
           ? (champsList[0]['id'] ?? '').toString()
           : null;
 
-      // 3) Météo today pour ce champ
+      // 3) Météo
       String temp = '--°';
       String condition = '--';
-
       if (champId != null && champId.isNotEmpty) {
         try {
           final todayRes = await _weatherApi.today(champId: champId);
           final today =
               (todayRes['today'] as Map?)?.cast<String, dynamic>() ?? {};
-
-          final t =
-              (today['temp'] is num) ? (today['temp'] as num).round() : null;
+          final t = (today['temp'] is num)
+              ? (today['temp'] as num).round()
+              : null;
           final desc = today['desc']?.toString();
-
           if (t != null) temp = '$t°';
-          if (desc != null && desc.isNotEmpty) {
+          if (desc != null && desc.isNotEmpty)
             condition = _normalizeWeather(desc);
-          }
-        } catch (_) {
-          // si météo échoue, on garde "--"
-        }
+        } catch (_) {}
       }
 
-      // 4) Historique diagnostics (preview)
+      // 4) Diagnostics
       List<DiagnosticResult> diags = [];
       try {
         final diagRes = await _diagApi.getHistory(limit: 6);
         final list = (diagRes['diagnostics'] as List?)?.cast<dynamic>() ?? [];
         diags = list
-            .map((e) =>
-                DiagnosticResult.fromJson((e as Map).cast<String, dynamic>()))
+            .map(
+              (e) =>
+                  DiagnosticResult.fromJson((e as Map).cast<String, dynamic>()),
+            )
             .toList();
-      } catch (_) {
-        // si diagnostics échoue, on garde liste vide
-      }
+      } catch (_) {}
+
+      // 5) Notifications (Alertes)
+      List<NotificationModel> notifs = [];
+      try {
+        final notifRes = await _api.get(
+          '/api/notifications',
+          headers: {'Authorization': 'Bearer $token'},
+        );
+        final list =
+            (notifRes['notifications'] as List?)?.cast<dynamic>() ?? [];
+        notifs = list
+            .map(
+              (e) => NotificationModel.fromJson(
+                (e as Map).cast<String, dynamic>(),
+              ),
+            )
+            .toList();
+      } catch (_) {}
 
       if (!mounted) return;
 
@@ -138,12 +144,10 @@ class _HomeScreenState extends State<HomeScreen> {
         _userName = userName;
         _userPhotoUrl = photoUrl;
         _champId = champId;
-
         _temp = temp;
         _condition = condition;
-
         _diagnostics = diags;
-
+        _notifications = notifs;
         _isLoading = false;
       });
     } catch (e) {
@@ -156,22 +160,15 @@ class _HomeScreenState extends State<HomeScreen> {
   String _normalizeWeather(String desc) {
     final d = desc.toLowerCase();
     if (d.contains('cloud')) return 'Cloudy';
-    if (d.contains('clear') || d.contains('soleil') || d.contains('sun')) {
+    if (d.contains('clear') || d.contains('soleil') || d.contains('sun'))
       return 'Sunny';
-    }
     if (d.contains('rain') || d.contains('pluie')) return 'Rainy';
     if (d.contains('storm') || d.contains('orage')) return 'Storm';
     return desc;
   }
 
-  //  Télécharge l'image_url en fichier local pour DiagnosticPage (qui attend un path local)
   Future<String> _downloadToLocalFile(String url) async {
-    final uri = Uri.parse(url);
-    final res = await http.get(uri);
-    if (res.statusCode != 200) {
-      throw Exception("Téléchargement image échoué (${res.statusCode}).");
-    }
-
+    final res = await http.get(Uri.parse(url));
     final dir = await getTemporaryDirectory();
     final file = File(
       '${dir.path}/diag_${DateTime.now().millisecondsSinceEpoch}.jpg',
@@ -180,46 +177,28 @@ class _HomeScreenState extends State<HomeScreen> {
     return file.path;
   }
 
-  //  Ouvrir DiagnosticPage quand on clique sur un historique
   Future<void> _openDiagnostic(DiagnosticResult diag) async {
     try {
-      // Ton modèle a imageUrl = json['image_url']
       final img = diag.imageUrl;
-
-      if (img.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Aucune image disponible pour ce diagnostic.")),
-        );
-        return;
-      }
-
+      if (img.isEmpty) return;
       String localPath;
-
-      // Si c'est déjà un fichier local
       if (img.startsWith('/') || img.startsWith('file://')) {
         localPath = img.replaceFirst('file://', '');
-      } else if (img.startsWith('http://') || img.startsWith('https://')) {
-        //  convertir URL -> fichier local
-        localPath = await _downloadToLocalFile(img);
       } else {
-        // cas relatif : ex "storage/diagnostics/xxx.jpg"
-        final fullUrl = '${AppConfig.baseUrl}/$img'.replaceAll('//', '/').replaceFirst(':/', '://');
+        final fullUrl = img.startsWith('http')
+            ? img
+            : '${AppConfig.baseUrl}/$img'
+                  .replaceAll('//', '/')
+                  .replaceFirst(':/', '://');
         localPath = await _downloadToLocalFile(fullUrl);
       }
-
       if (!mounted) return;
-
       Navigator.push(
         context,
-        MaterialPageRoute(
-          builder: (_) => DiagnosticPage(imagePath: localPath),
-        ),
+        MaterialPageRoute(builder: (_) => DiagnosticPage(imagePath: localPath)),
       );
     } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Impossible d'ouvrir ce diagnostic: $e")),
-      );
+      debugPrint("Erreur ouverture diag: $e");
     }
   }
 
@@ -231,80 +210,55 @@ class _HomeScreenState extends State<HomeScreen> {
         temperature: _temp,
         condition: _condition,
         diagnostics: _diagnostics,
-        onDiagnosticTap: _openDiagnostic, // ✅ callback ici
+        notifications: _notifications, // Passage des notifs
+        onDiagnosticTap: _openDiagnostic,
       ),
       const RecommandationsScreen(),
-
-      //  Important : on passe le vrai champId
       (_champId != null && _champId!.isNotEmpty)
           ? WeatherPage(champId: _champId!)
-          : const Center(child: Text("Aucun champ disponible pour la météo.")),
-
+          : const Center(child: Text("Aucun champ disponible.")),
       const ProfileScreen(),
     ];
   }
 
   @override
   Widget build(BuildContext context) {
-    const fabSize = 66.0;
-    const bottomBarBaseHeight = 64.0;
-
     return Scaffold(
       backgroundColor: AppColors.gris2,
       extendBody: true,
-      resizeToAvoidBottomInset: false,
-
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _pages[_currentIndex],
-
       floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
       floatingActionButton: SizedBox(
-        width: fabSize,
-        height: fabSize,
+        width: 66,
+        height: 66,
         child: FloatingActionButton(
           elevation: 5,
           backgroundColor: Colors.transparent,
-          onPressed: () {
-            Navigator.pushNamed(context, '/scan');
-          },
-          child: Image.asset(
-            AppImages.scan,
-            width: fabSize,
-            height: fabSize,
-            fit: BoxFit.contain,
-          ),
+          onPressed: () => Navigator.pushNamed(context, '/scan'),
+          child: Image.asset(AppImages.scan, fit: BoxFit.contain),
         ),
       ),
-
       bottomNavigationBar: _BottomBar(
-        height: bottomBarBaseHeight,
+        height: 64,
         currentIndex: _currentIndex,
         onTap: (i) {
           setState(() => _currentIndex = i);
-          if (i == 0) _loadHomeData(); // Rafraîchir si on revient à l'accueil
+          if (i == 0) _loadHomeData();
         },
       ),
     );
   }
 }
 
-/* -------------------------------------------------------------------------- */
-/* CONTENU DE L'ACCUEIL                                            */
-/* -------------------------------------------------------------------------- */
-
-class _HomeContent extends StatefulWidget {
+class _HomeContent extends StatelessWidget {
   final String userName;
   final String? userPhotoUrl;
-
-  // ✅ météo dynamique
   final String temperature;
   final String condition;
-
-  // ✅ diagnostics dynamiques
   final List<DiagnosticResult> diagnostics;
-
-  // ✅ callback au clic
+  final List<NotificationModel> notifications;
   final Future<void> Function(DiagnosticResult diag) onDiagnosticTap;
 
   const _HomeContent({
@@ -313,133 +267,92 @@ class _HomeContent extends StatefulWidget {
     required this.temperature,
     required this.condition,
     required this.diagnostics,
+    required this.notifications,
     required this.onDiagnosticTap,
   });
 
   @override
-  State<_HomeContent> createState() => _HomeContentState();
-}
-
-class _HomeContentState extends State<_HomeContent> {
-  static const int _maxAlertsPreview = 2;
-  static const int _maxDiagnosticsPreview = 6;
-
-  bool _showAllAlerts = false;
-  bool _showAllDiagnostics = false;
-
-  final List<_AlertItem> _alerts = const [
-    _AlertItem(title: 'Forte sécheresse', date: '17/12/2025'),
-    _AlertItem(title: 'Forte sécheresse', date: '17/12/2025'),
-    _AlertItem(title: 'Inondation', date: '18/12/2025'),
-    _AlertItem(title: 'Vent fort', date: '19/12/2025'),
-  ];
-
-  @override
   Widget build(BuildContext context) {
     final media = MediaQuery.of(context);
-    const fabSize = 66.0;
-    const bottomBarBaseHeight = 64.0;
-    final bottomInset = media.padding.bottom;
-    final bottomBarTotalHeight = bottomBarBaseHeight + bottomInset;
-    final scrollBottomPadding = bottomBarTotalHeight + (fabSize / 2) + 18;
+    final scrollBottomPadding = 64 + media.padding.bottom + (66 / 2) + 18;
 
-    final hasMoreAlerts = _alerts.length > _maxAlertsPreview;
-    final alertsToShow =
-        (_showAllAlerts || !hasMoreAlerts) ? _alerts : _alerts.take(_maxAlertsPreview).toList();
+    return Column(
+      children: [
+        _Header(
+          userName: userName,
+          userPhotoUrl: userPhotoUrl,
+          subtitle: 'Commence tes activités agricoles',
+          temperature: temperature,
+          condition: condition,
+          sidePadding: 16,
+          height: media.size.height * 0.2,
+          onNotificationTap: () =>
+              Navigator.pushNamed(context, AppRoutes.notifications),
+          showNotificationDot: true,
+        ),
+        Expanded(
+          child: SingleChildScrollView(
+            padding: EdgeInsets.fromLTRB(16, 14, 16, scrollBottomPadding),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // REMPLACEMENT PAR Le COMPOSANT DYNAMIQUE
+                HomeAlertsSection(
+                  notifications: notifications,
+                  onSeeAll: () =>
+                      Navigator.pushNamed(context, AppRoutes.notifications),
+                ),
 
-    final diags = widget.diagnostics;
-    final hasMoreDiagnostics = diags.length > _maxDiagnosticsPreview;
-    final diagnosticsToShow = (_showAllDiagnostics || !hasMoreDiagnostics)
-        ? diags
-        : diags.take(_maxDiagnosticsPreview).toList();
-
-    return SafeArea(
-      top: false,
-      bottom: false,
-      child: Column(
-        children: [
-          _Header(
-            userName: widget.userName,
-            userPhotoUrl: widget.userPhotoUrl,
-            subtitle: 'Commence tes activités agricoles',
-            temperature: widget.temperature,
-            condition: widget.condition,
-            sidePadding: 16,
-            height: media.size.height * 0.2,
-            onNotificationTap: () {
-              Navigator.pushNamed(context, AppRoutes.notifications);
-            },
-            showNotificationDot: true,
-          ),
-          Expanded(
-            child: SingleChildScrollView(
-              padding: EdgeInsets.fromLTRB(16, 14, 16, scrollBottomPadding),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _SectionHeader(
-                    title: 'Alertes',
-                    action: hasMoreAlerts ? (_showAllAlerts ? 'Voir moins' : 'Voir tout') : null,
-                    onTap: hasMoreAlerts ? () => setState(() => _showAllAlerts = !_showAllAlerts) : null,
-                  ),
-                  const SizedBox(height: 10),
-                  _CardContainer(
-                    child: Column(
-                      children: [
-                        for (int i = 0; i < alertsToShow.length; i++) ...[
-                          _ListRow(
-                            leadingImage: AppImages.alassane,
-                            title: alertsToShow[i].title,
-                            subtitle: alertsToShow[i].date,
-                          ),
-                          if (i != alertsToShow.length - 1) const SizedBox(height: 10),
-                        ],
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 18),
-
-                  _SectionHeader(
-                    title: 'Historique de diagnostics',
-                    action: (hasMoreDiagnostics) ? (_showAllDiagnostics ? 'Voir moins' : 'Voir tout') : null,
-                    onTap: (hasMoreDiagnostics) ? () => setState(() => _showAllDiagnostics = !_showAllDiagnostics) : null,
-                  ),
-                  const SizedBox(height: 10),
-
-                  _CardContainer(
-                    child: (diagnosticsToShow.isEmpty)
-                        ? const Padding(
-                            padding: EdgeInsets.all(8),
-                            child: Text("Aucun diagnostic pour le moment."),
-                          )
-                        : Column(
-                            children: [
-                              for (int i = 0; i < diagnosticsToShow.length; i++) ...[
-                                InkWell(
-                                  // ✅ clic sur l’item -> ouvre DiagnosticPage
-                                  onTap: () => widget.onDiagnosticTap(diagnosticsToShow[i]),
-                                  child: _ListRow(
-                                    leadingImage: AppImages.alassane,
-                                    title: diagnosticsToShow[i].maladie,
-                                    subtitle: diagnosticsToShow[i].createdAtShort,
-                                  ),
+                const SizedBox(height: 18),
+                _SectionHeader(
+                  title: 'Historique de diagnostics',
+                  action: diagnostics.length > 6 ? 'Voir tout' : null,
+                  onTap: () {},
+                ),
+                const SizedBox(height: 10),
+                _CardContainer(
+                  child: diagnostics.isEmpty
+                      ? const Padding(
+                          padding: EdgeInsets.all(8),
+                          child: Text("Aucun diagnostic."),
+                        )
+                      : Column(
+                          children: [
+                            for (
+                              int i = 0;
+                              i <
+                                  (diagnostics.length > 6
+                                      ? 6
+                                      : diagnostics.length);
+                              i++
+                            ) ...[
+                              InkWell(
+                                onTap: () => onDiagnosticTap(diagnostics[i]),
+                                child: _ListRow(
+                                  leadingImage: AppImages.alassane,
+                                  title: diagnostics[i].maladie,
+                                  subtitle: diagnostics[i].createdAtShort,
                                 ),
-                                if (i != diagnosticsToShow.length - 1) const SizedBox(height: 12),
-                              ],
+                              ),
+                              if (i !=
+                                  (diagnostics.length > 6
+                                      ? 5
+                                      : diagnostics.length - 1))
+                                const SizedBox(height: 12),
                             ],
-                          ),
-                  ),
-                ],
-              ),
+                          ],
+                        ),
+                ),
+              ],
             ),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
 
-/* ----------------------------- HEADER ----------------------------- */
+/* ----------------------------- LES AUTRES WIDGETS INTERNES RESTENT INCHANGÉS ----------------------------- */
 
 class _Header extends StatelessWidget {
   final String userName, subtitle, temperature, condition;
@@ -462,11 +375,9 @@ class _Header extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final double topPaddingFromSystem = MediaQuery.of(context).padding.top;
-    final double totalHeight = height + topPaddingFromSystem;
-
+    final double topPadding = MediaQuery.of(context).padding.top;
     return SizedBox(
-      height: totalHeight,
+      height: height + topPadding,
       child: Stack(
         children: [
           Positioned.fill(
@@ -490,17 +401,13 @@ class _Header extends StatelessWidget {
             right: -10,
             child: Opacity(
               opacity: 0.8,
-              child: Image.asset(
-                AppImages.feuille,
-                height: 100,
-                fit: BoxFit.contain,
-              ),
+              child: Image.asset(AppImages.feuille, height: 100),
             ),
           ),
           Padding(
             padding: EdgeInsets.fromLTRB(
               sidePadding,
-              topPaddingFromSystem + 12,
+              topPadding + 12,
               sidePadding,
               12,
             ),
@@ -521,12 +428,16 @@ class _Header extends StatelessWidget {
                         children: [
                           Text(
                             'Bonjour $userName !',
-                            style: AppTextStyles.titre1.copyWith(color: Colors.black87),
+                            style: AppTextStyles.titre1.copyWith(
+                              color: Colors.black87,
+                            ),
                             overflow: TextOverflow.ellipsis,
                           ),
                           Text(
                             subtitle,
-                            style: AppTextStyles.textgris.copyWith(color: Colors.black54),
+                            style: AppTextStyles.textgris.copyWith(
+                              color: Colors.black54,
+                            ),
                             overflow: TextOverflow.ellipsis,
                           ),
                         ],
@@ -636,8 +547,6 @@ class _NotificationIconifyButton extends StatelessWidget {
   }
 }
 
-/* --------------------------- COMPOSANTS ---------------------------- */
-
 class _SectionHeader extends StatelessWidget {
   final String title;
   final String? action;
@@ -737,7 +646,6 @@ class _Avatar extends StatelessWidget {
   final String imagePath;
   final String? networkUrl;
   final double size;
-
   const _Avatar({required this.imagePath, this.networkUrl, required this.size});
 
   @override
@@ -758,13 +666,10 @@ class _Avatar extends StatelessWidget {
   }
 }
 
-/* ------------------------- BARRE DE NAVIGATION ---------------------------- */
-
 class _BottomBar extends StatelessWidget {
   final double height;
   final int currentIndex;
   final ValueChanged<int> onTap;
-
   const _BottomBar({
     required this.height,
     required this.currentIndex,
@@ -862,9 +767,4 @@ class _NavItem extends StatelessWidget {
       ),
     );
   }
-}
-
-class _AlertItem {
-  final String title, date;
-  const _AlertItem({required this.title, required this.date});
 }
