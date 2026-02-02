@@ -1,4 +1,5 @@
 import 'dart:io';
+
 import 'package:agri_alert/screens/home/home_alerts_section.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:http/http.dart' as http;
@@ -32,6 +33,116 @@ class HomeScreen extends StatefulWidget {
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
+}
+
+/// ---------------------------------------------------------------------------
+/// HELPERS (format maladie + normalisation URL image)
+/// ---------------------------------------------------------------------------
+
+/// Map des plantes vers FR
+const Map<String, String> _plantFR = {
+  'papaye': 'Papaye',
+  'mango': 'Mangue',
+  'citrus': 'Agrumes',
+  'orange': 'Orange',
+  'tomato': 'Tomate',
+  'maize': 'Maïs',
+  'potato': 'Pomme de terre',
+  'grape': 'Raisin',
+  'strawberry': 'Fraise',
+};
+
+/// Map des maladies vers FR (tu peux compléter selon tes classes)
+const Map<String, String> _diseaseFR = {
+  'healthy': 'Sain',
+  'mosaic': 'Mosaïque',
+  'citrus canker': 'Chancre des agrumes',
+  'sooty mould': 'Fumagine (moisissure noire)',
+  'anthracnose': 'Anthracnose',
+  'powdery mildew': 'Oïdium',
+  'leaf spot': 'Taches foliaires',
+  'black rot': 'Pourriture noire',
+};
+
+String formatMaladieFr(String raw) {
+  var s = raw.trim();
+  if (s.isEmpty) return 'Diagnostic';
+
+  // normalise séparateurs
+  s = s.replaceAll('-', '_');
+  s = s.replaceAll(RegExp(r'\s+'), '_'); // espaces -> _
+  final parts = s.split('_').where((e) => e.trim().isNotEmpty).toList();
+
+  // si format inattendu, juste remplace "_" par " "
+  if (parts.length < 2) {
+    return raw.replaceAll('_', ' ').trim();
+  }
+
+  final plantKey = parts.first.toLowerCase();
+  final plant = _plantFR[plantKey] ?? _capitalize(parts.first);
+
+  final diseaseRaw = parts.sublist(1).join(' ').toLowerCase();
+
+  // certains modèles ont "Sooty Mould" avec espace => on gère déjà
+  final disease = _diseaseFR[diseaseRaw] ?? _capitalizeWords(diseaseRaw);
+
+  if (disease.toLowerCase() == 'sain' || disease.toLowerCase() == 'healthy') {
+    return '$plant (Sain)';
+  }
+
+  // rendu lisible
+  // ex: "Mosaïque de la Papaye"
+  if (disease.toLowerCase().contains('chancre')) {
+    return disease; // déjà explicite
+  }
+  if (disease.toLowerCase().contains('fumagine')) {
+    return '$disease ($plant)';
+  }
+
+  return '$disease de $plant';
+}
+
+String _capitalize(String s) =>
+    s.isEmpty ? s : '${s[0].toUpperCase()}${s.substring(1).toLowerCase()}';
+
+String _capitalizeWords(String s) => s
+    .split(' ')
+    .where((w) => w.isNotEmpty)
+    .map(_capitalize)
+    .join(' ')
+    .trim();
+
+/// Convertit une URL stockée en DB en URL accessible (vrai téléphone OK)
+/// - Si DB contient localhost ou 10.0.2.2 -> on remplace par AppConfig.baseUrl
+/// - Si DB contient un chemin relatif -> on le combine avec AppConfig.baseUrl
+String resolveDiagnosticImageUrl(String img) {
+  if (img.trim().isEmpty) return '';
+
+  final base = Uri.parse(AppConfig.baseUrl); // ex: http://192.168.1.5:8000
+
+  // cas absolu
+  if (img.startsWith('http://') || img.startsWith('https://')) {
+    final u = Uri.parse(img);
+
+    //  Très important : sur téléphone, localhost / 10.0.2.2 ne marchent pas
+    final badHost = (u.host == 'localhost' || u.host == '10.0.2.2');
+
+    if (!badHost) return img;
+
+    // remplace host+port par baseUrl
+    final fixed = u.replace(
+      scheme: base.scheme,
+      host: base.host,
+      port: base.hasPort ? base.port : u.port,
+    );
+
+    return fixed.toString();
+  }
+
+  // cas relatif : "storage/diagnostics/xxx.jpg" ou "/storage/diagnostics/xxx.jpg"
+  final cleaned = img.startsWith('/') ? img.substring(1) : img;
+  final full = base.resolve('/$cleaned');
+  return full.toString();
 }
 
 class _HomeScreenState extends State<HomeScreen> {
@@ -74,6 +185,7 @@ class _HomeScreenState extends State<HomeScreen> {
         '/api/profile/me',
         headers: {'Authorization': 'Bearer $token'},
       );
+
       final userJson =
           (profileRes['user'] as Map?)?.cast<String, dynamic>() ?? {};
       final userName = (userJson['nom'] ?? "Utilisateur").toString();
@@ -85,9 +197,8 @@ class _HomeScreenState extends State<HomeScreen> {
         headers: {'Authorization': 'Bearer $token'},
       );
       final champsList = (champsRes['champs'] as List?)?.cast<dynamic>() ?? [];
-      final champId = champsList.isNotEmpty
-          ? (champsList[0]['id'] ?? '').toString()
-          : null;
+      final champId =
+          champsList.isNotEmpty ? (champsList[0]['id'] ?? '').toString() : null;
 
       // 3) Météo
       String temp = '--°';
@@ -97,13 +208,13 @@ class _HomeScreenState extends State<HomeScreen> {
           final todayRes = await _weatherApi.today(champId: champId);
           final today =
               (todayRes['today'] as Map?)?.cast<String, dynamic>() ?? {};
-          final t = (today['temp'] is num)
-              ? (today['temp'] as num).round()
-              : null;
+          final t =
+              (today['temp'] is num) ? (today['temp'] as num).round() : null;
           final desc = today['desc']?.toString();
           if (t != null) temp = '$t°';
-          if (desc != null && desc.isNotEmpty)
+          if (desc != null && desc.isNotEmpty) {
             condition = _normalizeWeather(desc);
+          }
         } catch (_) {}
       }
 
@@ -113,10 +224,8 @@ class _HomeScreenState extends State<HomeScreen> {
         final diagRes = await _diagApi.getHistory(limit: 6);
         final list = (diagRes['diagnostics'] as List?)?.cast<dynamic>() ?? [];
         diags = list
-            .map(
-              (e) =>
-                  DiagnosticResult.fromJson((e as Map).cast<String, dynamic>()),
-            )
+            .map((e) =>
+                DiagnosticResult.fromJson((e as Map).cast<String, dynamic>()))
             .toList();
       } catch (_) {}
 
@@ -130,11 +239,8 @@ class _HomeScreenState extends State<HomeScreen> {
         final list =
             (notifRes['notifications'] as List?)?.cast<dynamic>() ?? [];
         notifs = list
-            .map(
-              (e) => NotificationModel.fromJson(
-                (e as Map).cast<String, dynamic>(),
-              ),
-            )
+            .map((e) =>
+                NotificationModel.fromJson((e as Map).cast<String, dynamic>()))
             .toList();
       } catch (_) {}
 
@@ -160,15 +266,21 @@ class _HomeScreenState extends State<HomeScreen> {
   String _normalizeWeather(String desc) {
     final d = desc.toLowerCase();
     if (d.contains('cloud')) return 'Cloudy';
-    if (d.contains('clear') || d.contains('soleil') || d.contains('sun'))
+    if (d.contains('clear') || d.contains('soleil') || d.contains('sun')) {
       return 'Sunny';
+    }
     if (d.contains('rain') || d.contains('pluie')) return 'Rainy';
     if (d.contains('storm') || d.contains('orage')) return 'Storm';
     return desc;
   }
 
+  /// Télécharge l'image pour DiagnosticPage (car DiagnosticPage attend un path local)
   Future<String> _downloadToLocalFile(String url) async {
     final res = await http.get(Uri.parse(url));
+    if (res.statusCode != 200) {
+      throw Exception("Téléchargement image échoué (${res.statusCode}).");
+    }
+
     final dir = await getTemporaryDirectory();
     final file = File(
       '${dir.path}/diag_${DateTime.now().millisecondsSinceEpoch}.jpg',
@@ -177,27 +289,47 @@ class _HomeScreenState extends State<HomeScreen> {
     return file.path;
   }
 
+  /// Ouvre DiagnosticPage quand on clique sur un historique
   Future<void> _openDiagnostic(DiagnosticResult diag) async {
     try {
-      final img = diag.imageUrl;
-      if (img.isEmpty) return;
-      String localPath;
-      if (img.startsWith('/') || img.startsWith('file://')) {
-        localPath = img.replaceFirst('file://', '');
-      } else {
-        final fullUrl = img.startsWith('http')
-            ? img
-            : '${AppConfig.baseUrl}/$img'
-                  .replaceAll('//', '/')
-                  .replaceFirst(':/', '://');
-        localPath = await _downloadToLocalFile(fullUrl);
+      final raw = diag.imageUrl.trim();
+      if (raw.isEmpty) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Aucune image disponible pour ce diagnostic.")),
+        );
+        return;
       }
+
+      //  normalise URL (important sur téléphone)
+      final url = resolveDiagnosticImageUrl(raw);
+
+      // petit loader visible (sinon sur téléphone tu penses que rien ne se passe)
       if (!mounted) return;
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => const Center(child: CircularProgressIndicator()),
+      );
+
+      final localPath = await _downloadToLocalFile(url);
+
+      if (!mounted) return;
+      Navigator.pop(context); // ferme le loader
+
       Navigator.push(
         context,
-        MaterialPageRoute(builder: (_) => DiagnosticPage(imagePath: localPath)),
+        MaterialPageRoute(
+          builder: (_) => DiagnosticPage(imagePath: localPath),
+        ),
       );
     } catch (e) {
+      //  sur téléphone, on affiche l'erreur (sinon tu vois rien)
+      if (!mounted) return;
+      Navigator.pop(context); // ferme le loader si ouvert
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Impossible d'ouvrir le diagnostic: $e")),
+      );
       debugPrint("Erreur ouverture diag: $e");
     }
   }
@@ -210,7 +342,7 @@ class _HomeScreenState extends State<HomeScreen> {
         temperature: _temp,
         condition: _condition,
         diagnostics: _diagnostics,
-        notifications: _notifications, // Passage des notifs
+        notifications: _notifications,
         onDiagnosticTap: _openDiagnostic,
       ),
       const RecommandationsScreen(),
@@ -296,7 +428,7 @@ class _HomeContent extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // REMPLACEMENT PAR Le COMPOSANT DYNAMIQUE
+                // composant alertes
                 HomeAlertsSection(
                   notifications: notifications,
                   onSeeAll: () =>
@@ -304,12 +436,14 @@ class _HomeContent extends StatelessWidget {
                 ),
 
                 const SizedBox(height: 18),
+
                 _SectionHeader(
                   title: 'Historique de diagnostics',
                   action: diagnostics.length > 6 ? 'Voir tout' : null,
                   onTap: () {},
                 ),
                 const SizedBox(height: 10),
+
                 _CardContainer(
                   child: diagnostics.isEmpty
                       ? const Padding(
@@ -318,26 +452,31 @@ class _HomeContent extends StatelessWidget {
                         )
                       : Column(
                           children: [
-                            for (
-                              int i = 0;
-                              i <
-                                  (diagnostics.length > 6
-                                      ? 6
-                                      : diagnostics.length);
-                              i++
-                            ) ...[
-                              InkWell(
-                                onTap: () => onDiagnosticTap(diagnostics[i]),
-                                child: _ListRow(
-                                  leadingImage: AppImages.alassane,
-                                  title: diagnostics[i].maladie,
-                                  subtitle: diagnostics[i].createdAtShort,
+                            for (int i = 0;
+                                i < (diagnostics.length > 6 ? 6 : diagnostics.length);
+                                i++) ...[
+                              //  InkWell fiable + zone cliquable pleine largeur
+                              Material(
+                                color: Colors.transparent,
+                                child: InkWell(
+                                  onTap: () => onDiagnosticTap(diagnostics[i]),
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(vertical: 4),
+                                    child: _ListRow(
+                                      //  photo diagnostic (réelle)
+                                      leadingUrl: resolveDiagnosticImageUrl(diagnostics[i].imageUrl),
+                                      leadingFallbackAsset: AppImages.alassane,
+
+                                      //  nom FR lisible
+                                      title: formatMaladieFr(diagnostics[i].maladie),
+
+                                      subtitle: diagnostics[i].createdAtShort,
+                                    ),
+                                  ),
                                 ),
                               ),
-                              if (i !=
-                                  (diagnostics.length > 6
-                                      ? 5
-                                      : diagnostics.length - 1))
+                              if (i != (diagnostics.length > 6 ? 5 : diagnostics.length - 1))
                                 const SizedBox(height: 12),
                             ],
                           ],
@@ -606,18 +745,30 @@ class _CardContainer extends StatelessWidget {
 }
 
 class _ListRow extends StatelessWidget {
-  final String leadingImage, title, subtitle;
+  final String title;
+  final String subtitle;
+
+  //  avatar dynamique
+  final String? leadingUrl;
+  final String leadingFallbackAsset;
+
   const _ListRow({
-    required this.leadingImage,
+    super.key,
     required this.title,
     required this.subtitle,
+    this.leadingUrl,
+    required this.leadingFallbackAsset,
   });
 
   @override
   Widget build(BuildContext context) {
     return Row(
       children: [
-        _Avatar(imagePath: leadingImage, size: 40),
+        _NetworkOrAssetAvatar(
+          url: leadingUrl,
+          fallbackAsset: leadingFallbackAsset,
+          size: 40,
+        ),
         const SizedBox(width: 10),
         Expanded(
           child: Column(
@@ -638,6 +789,60 @@ class _ListRow extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _NetworkOrAssetAvatar extends StatelessWidget {
+  final String? url;
+  final String fallbackAsset;
+  final double size;
+
+  const _NetworkOrAssetAvatar({
+    required this.url,
+    required this.fallbackAsset,
+    required this.size,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final hasUrl = (url != null && url!.trim().isNotEmpty);
+
+    return ClipOval(
+      child: Container(
+        width: size,
+        height: size,
+        color: Colors.grey.shade200,
+        child: hasUrl
+            ? Image.network(
+                url!,
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => Image.asset(
+                  fallbackAsset,
+                  fit: BoxFit.cover,
+                ),
+                loadingBuilder: (context, child, progress) {
+                  if (progress == null) return child;
+                  return Center(
+                    child: SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        value: progress.expectedTotalBytes != null
+                            ? progress.cumulativeBytesLoaded /
+                                (progress.expectedTotalBytes ?? 1)
+                            : null,
+                      ),
+                    ),
+                  );
+                },
+              )
+            : Image.asset(
+                fallbackAsset,
+                fit: BoxFit.cover,
+              ),
+      ),
     );
   }
 }
