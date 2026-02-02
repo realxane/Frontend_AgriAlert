@@ -118,32 +118,50 @@ String _capitalizeWords(String s) => s
 String resolveDiagnosticImageUrl(String img) {
   if (img.trim().isEmpty) return '';
 
-  final base = Uri.parse(AppConfig.baseUrl); // ex: http://192.168.1.5:8000
+  final base = Uri.parse(AppConfig.baseUrl);
+
+  bool isPrivateHost(String host) {
+    if (host == 'localhost' || host == '10.0.2.2') return true;
+
+    // 192.168.x.x
+    if (host.startsWith('192.168.')) return true;
+
+    // 10.x.x.x
+    if (host.startsWith('10.')) return true;
+
+    // 172.16.x.x -> 172.31.x.x
+    if (host.startsWith('172.')) {
+      final parts = host.split('.');
+      if (parts.length >= 2) {
+        final second = int.tryParse(parts[1]) ?? -1;
+        if (second >= 16 && second <= 31) return true;
+      }
+    }
+    return false;
+  }
 
   // cas absolu
   if (img.startsWith('http://') || img.startsWith('https://')) {
     final u = Uri.parse(img);
 
-    //  Très important : sur téléphone, localhost / 10.0.2.2 ne marchent pas
-    final badHost = (u.host == 'localhost' || u.host == '10.0.2.2');
+    // si host local/privé -> on remplace par baseUrl
+    if (isPrivateHost(u.host)) {
+      final fixed = u.replace(
+        scheme: base.scheme,
+        host: base.host,
+        port: base.hasPort ? base.port : u.port,
+      );
+      return fixed.toString();
+    } 
 
-    if (!badHost) return img;
-
-    // remplace host+port par baseUrl
-    final fixed = u.replace(
-      scheme: base.scheme,
-      host: base.host,
-      port: base.hasPort ? base.port : u.port,
-    );
-
-    return fixed.toString();
+    return img; // URL publique OK
   }
 
-  // cas relatif : "storage/diagnostics/xxx.jpg" ou "/storage/diagnostics/xxx.jpg"
+  // cas relatif
   final cleaned = img.startsWith('/') ? img.substring(1) : img;
-  final full = base.resolve('/$cleaned');
-  return full.toString();
+  return base.resolve('/$cleaned').toString();
 }
+
 
 class _HomeScreenState extends State<HomeScreen> {
   int _currentIndex = 0;
